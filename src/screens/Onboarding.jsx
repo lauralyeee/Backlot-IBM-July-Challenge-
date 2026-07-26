@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ROLES, PERSONAS } from "../lib/worldData";
 import { Btn, Chip, Field } from "../components/ui";
 import { IconSun, IconMoon, IconCheck, IconArrowRight } from "../components/Icons";
+import { generateCustomPersona } from "../lib/api";
 
 const CAPABILITIES = [
   { icon: "📜", title: "Gap-Filling Engine", text: "Turn a one-line idea into full, canon-consistent lore." },
@@ -16,7 +17,60 @@ export default function Onboarding({ onDone, mode, toggleTheme }) {
   const [roles, setRoles] = useState([]);
   const [persona, setPersona] = useState(null);
   const [name, setName] = useState("");
+
+  // custom-world state
+  const [showCustom, setShowCustom] = useState(false);
+  const [customDesc, setCustomDesc] = useState("");
+  const [customGenerating, setCustomGenerating] = useState(false);
+  const [customOffline, setCustomOffline] = useState(false);
+
   const toggleRole = (id) => setRoles((r) => (r.includes(id) ? r.filter((x) => x !== id) : [...r, id]));
+
+  const handlePickPersona = (p) => {
+    setShowCustom(false);
+    setPersona(p);
+    setStep(2);
+  };
+
+  const handleCustomGenerate = async () => {
+    if (customGenerating || customDesc.trim().length < 10) return;
+    setCustomGenerating(true);
+    setCustomOffline(false);
+    try {
+      const data = await generateCustomPersona(customDesc.trim());
+      const built = {
+        id: "custom",
+        label: data.personaLabel || "Custom world",
+        desc: customDesc.trim(),
+        eras: Array.isArray(data.eras) && data.eras.length === 3
+          ? data.eras
+          : ["Act One", "Act Two", "Act Three"],
+        nameIdeas: Array.isArray(data.nameIdeas) ? data.nameIdeas : [],
+        dialects: {},
+        ideas: [],
+        seed: Array.isArray(data.seed) ? data.seed : [],
+      };
+      setPersona(built);
+      setStep(2);
+    } catch (_err) {
+      // Offline fallback — let user continue with generic structure
+      setCustomOffline(true);
+      const built = {
+        id: "custom",
+        label: "Custom world",
+        desc: customDesc.trim(),
+        eras: ["Act One", "Act Two", "Act Three"],
+        nameIdeas: [],
+        dialects: {},
+        ideas: [],
+        seed: [],
+      };
+      setPersona(built);
+      setStep(2);
+    } finally {
+      setCustomGenerating(false);
+    }
+  };
 
   return (
     <div style={{ minHeight: "100vh", display: "grid", gridTemplateColumns: "1.1fr 1fr" }} className="onboarding-grid">
@@ -111,13 +165,53 @@ export default function Onboarding({ onDone, mode, toggleTheme }) {
                 {PERSONAS.map((p) => (
                   <button
                     key={p.id}
-                    onClick={() => { setPersona(p); setStep(2); }}
+                    onClick={() => handlePickPersona(p)}
                     style={{ display: "block", textAlign: "left", padding: "16px 18px", borderRadius: "var(--radius)", border: "1px solid var(--border)", background: "var(--surface)", cursor: "pointer", color: "var(--text)" }}
                   >
                     <div style={{ fontWeight: 600, fontSize: 15.5 }}>{p.label}</div>
                     <div style={{ fontSize: 13, color: "var(--text-dim)", marginTop: 2 }}>{p.desc}</div>
                   </button>
                 ))}
+
+                {/* 5th option: describe your own world */}
+                <button
+                  onClick={() => setShowCustom((v) => !v)}
+                  style={{
+                    display: "block", textAlign: "left", padding: "16px 18px",
+                    borderRadius: "var(--radius)",
+                    border: `1px solid ${showCustom ? "var(--accent)" : "var(--border)"}`,
+                    background: showCustom ? "var(--accent-soft)" : "var(--surface)",
+                    cursor: "pointer", color: "var(--text)",
+                  }}
+                >
+                  <div style={{ fontWeight: 600, fontSize: 15.5 }}>Describe your own world</div>
+                  <div style={{ fontSize: 13, color: "var(--text-dim)", marginTop: 2 }}>A few sentences — we'll build the structure around your idea</div>
+                </button>
+
+                {showCustom && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "4px 2px" }}>
+                    <textarea
+                      value={customDesc}
+                      onChange={(e) => setCustomDesc(e.target.value)}
+                      placeholder="A few sentences about the world you want — genre, era, what's at stake…"
+                      rows={4}
+                      style={{
+                        width: "100%", boxSizing: "border-box",
+                        padding: "12px 14px", borderRadius: "var(--radius)",
+                        border: "1px solid var(--border)", background: "var(--surface)",
+                        color: "var(--text)", fontSize: 14, lineHeight: 1.6,
+                        resize: "vertical", fontFamily: "inherit",
+                      }}
+                    />
+                    <Btn
+                      variant="primary"
+                      disabled={customDesc.trim().length < 10 || customGenerating}
+                      onClick={handleCustomGenerate}
+                    >
+                      {customGenerating ? "Generating…" : "Generate"} <IconArrowRight width={16} height={16} />
+                    </Btn>
+                  </div>
+                )}
               </div>
               <Btn onClick={() => setStep(0)}>Back</Btn>
             </div>
@@ -128,12 +222,21 @@ export default function Onboarding({ onDone, mode, toggleTheme }) {
               <div className="section-label">Step 3 of 3</div>
               <h2 style={{ fontSize: 24, marginBottom: 6 }}>Name your world</h2>
               <p style={{ color: "var(--text-dim)", fontSize: 14.5, marginBottom: 16 }}>Pick an idea, or write your own.</p>
+              {customOffline && (
+                <div style={{
+                  fontSize: 13, color: "var(--text-dim)", background: "var(--surface)",
+                  border: "1px solid var(--border)", borderRadius: "var(--radius)",
+                  padding: "10px 14px", marginBottom: 16,
+                }}>
+                  Generated offline — eras and seed entries will be placeholders. You can refine them later.
+                </div>
+              )}
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
                 {persona.nameIdeas.map((n) => <Chip key={n} active={name === n} onClick={() => setName(n)}>{n}</Chip>)}
               </div>
               <Field value={name} onChange={(e) => setName(e.target.value)} placeholder="Or type your own name…" style={{ marginBottom: 20 }} />
               <div style={{ display: "flex", gap: 10 }}>
-                <Btn onClick={() => setStep(1)}>Back</Btn>
+                <Btn onClick={() => { setStep(1); setCustomOffline(false); }}>Back</Btn>
                 <Btn variant="primary" disabled={!name.trim()} onClick={() => onDone({
                   name: name.trim(), roles, personaId: persona.id, personaLabel: persona.label,
                   eras: persona.eras, ideas: persona.ideas, dialects: persona.dialects || {},

@@ -11,6 +11,11 @@ const WX_PROJECT_ID = import.meta.env.VITE_WATSONX_PROJECT_ID;
 // If IBM retires another model in this list, use listAvailableModels()
 // below (surfaced in Settings > Test connection) to find the current ID.
 const MODEL_CHAIN = ["ibm/granite-4-h-small", "ibm/granite-3-3-8b-instruct"];
+// NOTE (2026-07-26): this file is legacy/unused (see AGENTS.md) — the live
+// backend (backend/watsonx.py) switched from /ml/v1/text/generation to
+// /ml/v1/text/chat to fix leaked instruction text / runaway replies in
+// character chat. This file was not ported to match; comment kept in sync
+// per AGENTS.md's instruction, not the implementation.
 
 let lastGoodModel = null;
 

@@ -53,6 +53,36 @@ def normalize_asset(raw: dict, world: dict, fallback_type: str | None = None) ->
     }
 
 
+
+# ── Custom persona prompt builder ─────────────────────────────────────────────
+
+def custom_persona_prompt(description: str) -> tuple[str, str]:
+    """Return (system_prompt, user_prompt) for generating a persona from a free-text description."""
+    system_prompt = (
+        "You are a worldbuilding assistant. Given a brief description of a world concept, "
+        "produce a structured persona object for a story world. "
+        "Output must be a single JSON object and nothing else — no explanation, no markdown. "
+        "Begin your response with { and end with }."
+    )
+    user_prompt = (
+        "Create a persona for this world concept:\n"
+        f"{description}\n\n"
+        "Return a JSON object with exactly these keys:\n"
+        "  \"personaLabel\": a short evocative label for the world archetype (string, 2-5 words),\n"
+        "  \"eras\": an array of exactly 3 era names as strings (evocative, short),\n"
+        "  \"nameIdeas\": an array of exactly 4 evocative world name suggestions as strings,\n"
+        "  \"seed\": an array of 2-3 starter canon entries, each an object with keys: "
+        "\"title\" (short name), \"type\" (one of: lore|character|location|faction|event), "
+        "\"era\" (must match one of the eras you defined), "
+        "\"faction\" (an established faction name or \"\\u2014\"), "
+        "\"mood\" (one lowercase word), "
+        "\"content\" (60-140 words of vivid, original description).\n"
+        "Begin your response with { and end with }."
+    )
+    return system_prompt, user_prompt
+
+
+
 # ── Offline fallbacks (mirror of generation.js) ───────────────────────────
 
 def _pick(arr, seed):

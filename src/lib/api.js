@@ -51,6 +51,16 @@ export const generateAsset = (worldId, mode, opts = {}) =>
     force_type: opts.forceType || null,
   });
 
+// ── Custom persona generation ──────────────────────────────────────────────
+
+/**
+ * @param {string} description  Free-text world description from the user
+ * @returns {{ personaLabel, eras, nameIdeas, seed, offline? }}
+ */
+export const generateCustomPersona = (description) =>
+  req("POST", "/personas/custom", { description });
+
+
 // ── Consistency audit ──────────────────────────────────────────────────────
 
 export const auditWorld = (worldId) => req("POST", `/worlds/${worldId}/audit`, {});

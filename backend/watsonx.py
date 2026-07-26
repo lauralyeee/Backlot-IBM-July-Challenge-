@@ -4,6 +4,16 @@ watsonx.ai / IBM Granite client — server-side.
 Credentials (WATSONX_API_KEY, WATSONX_PROJECT_ID) live only here;
 the browser never sees them.  The frontend calls /api/generate,
 /api/ping, /api/models — this module handles the actual IBM calls.
+
+NOTE (2026-07-26): switched from the raw completion endpoint
+(/ml/v1/text/generation) to the chat-completions endpoint
+(/ml/v1/text/chat). The completion endpoint requires the caller to
+hand-format Granite's chat template (<|start_of_role|>...<|end_of_text|>)
+and had no reliable stop signal, which is why replies were sometimes
+running on past the answer and echoing instruction-like text back at
+the user. /text/chat takes structured {role, content} messages and lets
+watsonx.ai apply each model's own chat template + stop handling, which
+is IBM's documented way to drive instruct/chat models.
 """
 
 import os
@@ -51,18 +61,47 @@ async def _get_token(client: httpx.AsyncClient) -> str:
     return token
 
 
-async def _call_model(client: httpx.AsyncClient, model: str, prompt: str) -> str:
+def _msg(role: str, text: str) -> dict:
+    """Build a /text/chat message. User content is an array of text parts
+    per watsonx.ai's chat schema; system/assistant content is a plain
+    string."""
+    if role == "user":
+        return {"role": "user", "content": [{"type": "text", "text": text}]}
+    return {"role": role, "content": text}
+
+
+def chat_message(role: str, text: str) -> dict:
+    """Public alias of _msg() for callers (e.g. main.py) building multi-turn
+    message lists directly, such as character-chat history."""
+    return _msg(role, text)
+
+
+def _extract_reply(data: dict) -> str:
+    choices = data.get("choices") or []
+    if not choices:
+        return ""
+    message = choices[0].get("message") or {}
+    content = message.get("content", "")
+    if isinstance(content, list):
+        content = "".join(
+            part.get("text", "") for part in content if isinstance(part, dict)
+        )
+    return content or ""
+
+
+async def _call_chat(
+    client: httpx.AsyncClient, model: str, messages: list[dict], max_tokens: int
+) -> str:
     token = await _get_token(client)
     resp = await client.post(
-        f"{WX_BASE}/ml/v1/text/generation?version=2024-05-01",
+        f"{WX_BASE}/ml/v1/text/chat?version=2024-05-31",
         json={
             "model_id": model,
             "project_id": WATSONX_PROJECT_ID,
-            "input": prompt,
+            "messages": messages,
             "parameters": {
-                "decoding_method": "greedy",
-                "max_new_tokens": 1000,
-                "stop_sequences": [],
+                "max_new_tokens": max_tokens,
+                "time_limit": 30000,
             },
         },
         headers={
@@ -76,7 +115,7 @@ async def _call_model(client: httpx.AsyncClient, model: str, prompt: str) -> str
     if not resp.is_success or data.get("errors"):
         msg = (data.get("errors") or [{}])[0].get("message", f"status {resp.status_code}")
         raise RuntimeError(msg)
-    text = "\n".join(r.get("generated_text", "") for r in (data.get("results") or []))
+    text = _extract_reply(data)
     if not text.strip():
         raise RuntimeError("empty response from model")
     return text
@@ -85,10 +124,13 @@ async def _call_model(client: httpx.AsyncClient, model: str, prompt: str) -> str
 _last_good_model: str | None = None
 
 
-async def generate(system: str, user: str) -> str:
-    """Call the model chain with fallback, same strategy as the JS original."""
+async def generate_messages(messages: list[dict], max_tokens: int = 1000) -> str:
+    """Call the model chain with fallback, chat-endpoint version.
+
+    messages must already be in {role, content} form — build them with
+    _msg() or pass through generate() below for the common system+user case.
+    """
     global _last_good_model
-    prompt = f"{system}\n\n---\n\n{user}"
     order = (
         [_last_good_model] + [m for m in MODEL_CHAIN if m != _last_good_model]
         if _last_good_model
@@ -100,7 +142,7 @@ async def generate(system: str, user: str) -> str:
         for model in order:
             for attempt in range(2):
                 try:
-                    text = await _call_model(client, model, prompt)
+                    text = await _call_chat(client, model, messages, max_tokens)
                     _last_good_model = model
                     return text
                 except Exception as exc:
@@ -108,14 +150,29 @@ async def generate(system: str, user: str) -> str:
                     if attempt == 0:
                         await asyncio.sleep(0.6)
 
-        # Last-tier: most-current model, shorter prompt
+        # Last-tier: most-current model, shorter final user turn only
         try:
-            text = await _call_model(client, MODEL_CHAIN[0], user[:400])
+            shortened = [m for m in messages if m.get("role") != "user"]
+            last_user = next((m for m in reversed(messages) if m.get("role") == "user"), None)
+            if last_user:
+                parts = last_user.get("content")
+                text_val = parts[0]["text"] if isinstance(parts, list) and parts else str(parts)
+                shortened = shortened + [_msg("user", text_val[:400])]
+            text = await _call_chat(client, MODEL_CHAIN[0], shortened or messages, max_tokens)
             return text
         except Exception as exc:
             last_error = exc
 
     raise RuntimeError(f"{last_error} — tried {len(order)} models")
+
+
+async def generate(system: str, user: str, max_tokens: int = 1000) -> str:
+    """Convenience wrapper for the common single-turn system+user case."""
+    messages = []
+    if system:
+        messages.append(_msg("system", system))
+    messages.append(_msg("user", user))
+    return await generate_messages(messages, max_tokens)
 
 
 async def ping() -> dict:
@@ -124,7 +181,9 @@ async def ping() -> dict:
     async with httpx.AsyncClient() as client:
         for model in MODEL_CHAIN:
             try:
-                reply = await _call_model(client, model, "Reply with the single word: ready")
+                reply = await _call_chat(
+                    client, model, [_msg("user", "Reply with the single word: ready")], 20
+                )
                 global _last_good_model
                 _last_good_model = model
                 return {"model": model, "reply": reply.strip()}

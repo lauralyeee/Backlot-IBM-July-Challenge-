@@ -28,6 +28,10 @@ AI worldbuilding assistant built on IBM Granite via watsonx.ai, for the IBM AI B
 - Python 3.11+
 - An IBM Cloud account with a watsonx.ai project and API key
 
+`backend/.env` is already set up with a working `WATSONX_API_KEY` and `WATSONX_PROJECT_ID` — no credentials setup needed, just install and run.
+
+> Note: `.env` is gitignored (see `.env.example` for the shape it takes) so it won't come through if you `git clone` the repo fresh — if that's how you got the code, ask Laura to send you `backend/.env` directly rather than trying to recreate it from the example file.
+
 ### Backend
 
 ```bash
@@ -35,8 +39,6 @@ cd backend
 python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env
-# Edit .env: set WATSONX_API_KEY and WATSONX_PROJECT_ID
 uvicorn main:app --reload --port 8000
 ```
 
@@ -48,7 +50,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173. The Vite dev server proxies `/api/*` to the backend on port 8000.
+Open http://localhost:5173. The Vite dev server proxies `/api/*` to the backend on port 8000. To confirm the backend can reach watsonx, hit `GET http://localhost:8000/api/ping`.
 
 ## API endpoints
 

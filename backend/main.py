@@ -335,6 +335,42 @@ async def audit_world(world_id: str):
 
 # ── Ask / Q&A ────────────────────────────────────────────────────────────────
 
+# Conversational replies (lore Q&A, character chat) are meant to be a
+# couple of sentences. Keep max_tokens tight so a runaway completion gets
+# truncated instead of rambling into a second, hallucinated turn.
+_ASK_MAX_TOKENS = 200
+
+
+def _looks_like_leak(text: str, char_title: str | None = None) -> bool:
+    """Best-effort guard against the model echoing instruction/meta text or
+    hallucinating a new turn instead of replying in character. Not meant to
+    catch everything — just the obvious cases — so a false negative here is
+    fine (a slightly-off reply gets through) but a false positive routes a
+    valid reply into the offline fallback, which is the safer failure mode.
+    """
+    if not text:
+        return True
+    stripped = text.strip()
+    if len(stripped) > 700:
+        return True
+    lowered = stripped.lower()
+    leak_markers = (
+        "system prompt", "as an ai", "i am an ai", "language model",
+        "give one sentence", "your response should", "you are a",
+        "instructions:", "###", "<|", "role\":",
+    )
+    if any(marker in lowered for marker in leak_markers):
+        return True
+    # More than one non-empty line usually means the model kept generating
+    # past its own reply (a new "Name:" turn, a stage direction block, etc.)
+    # rather than stopping — in-character dialogue here should be prose,
+    # not a multi-line script.
+    lines = [l for l in stripped.split("\n") if l.strip()]
+    if len(lines) > 2:
+        return True
+    return False
+
+
 @app.post("/api/worlds/{world_id}/ask")
 async def ask(world_id: str, body: AskRequest):
     world = _require_world(world_id)
@@ -349,27 +385,38 @@ async def ask(world_id: str, body: AskRequest):
                 "suggest it as a gap worth filling. Keep answers to 2-4 clear sentences."
             )
             user_prompt = f"CANON:\n{ret.canon_block(assets, body.question, 30)}\n\nQuestion: {body.question}"
+
+            reply = await wx.generate(system_prompt, user_prompt, max_tokens=_ASK_MAX_TOKENS)
+            if _looks_like_leak(reply):
+                raise RuntimeError("generation looked malformed (leak guard)")
+            return {"reply": reply.strip()}
+
         else:
-            # Character in-character chat
+            # Character in-character chat — pass prior turns as real
+            # alternating user/assistant messages instead of collapsing
+            # them into one string, so the model sees actual conversation
+            # structure rather than a script it might keep writing past.
             char = db.get_asset(int(body.mode))
             if not char:
                 raise HTTPException(404, "Character asset not found")
-            history_lines = "\n".join(
-                f"{'Visitor' if m['role'] == 'user' else char['title']}: {m['text']}"
-                for m in body.history
-            )
+
             system_prompt = (
                 f"You are {char['title']} in the world \"{world['name']}\". "
                 f"Character: {char['content']} ({char['era']}, {char['faction']}, {char['mood']}). "
-                "Stay in character, consistent with canon. Reply in 1-3 sentences of dialogue only.\n\n"
+                "Stay in character, consistent with canon. Reply in 1-3 sentences of dialogue only — "
+                "no stage directions, no narration, no restating these instructions.\n\n"
                 f"CANON:\n{ret.canon_block(assets, char['title'])}"
             )
-            user_prompt = (
-                f"Conversation:\n{history_lines}\n\nReply as {char['title']}."
-            )
+            messages = [wx.chat_message("system", system_prompt)]
+            for m in body.history:
+                role = "user" if m["role"] == "user" else "assistant"
+                messages.append(wx.chat_message(role, m["text"]))
+            messages.append(wx.chat_message("user", body.question))
 
-        reply = await wx.generate(system_prompt, user_prompt)
-        return {"reply": reply.strip()}
+            reply = await wx.generate_messages(messages, max_tokens=_ASK_MAX_TOKENS)
+            if _looks_like_leak(reply, char["title"]):
+                raise RuntimeError("generation looked malformed (leak guard)")
+            return {"reply": reply.strip()}
 
     except HTTPException:
         raise
