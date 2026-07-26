@@ -12,8 +12,8 @@ Endpoints:
   POST /api/worlds/{id}/audit          consistency audit
   POST /api/worlds/{id}/ask            Q&A (lore or character-in-character)
   POST /api/personas/custom            generate a persona from a free-text description
-  POST /api/worlds/{id}/ingest         script/doc ingestion → auto-breakdown (Feature 1)
-  POST /api/worlds/{id}/assets/{aid}/confirm   approve an unconfirmed ingested asset
+  POST /api/worlds/{id}/ingest         script/doc → extracted proposals (read-only, Feature 1)
+  POST /api/worlds/{id}/ingest/commit  persist writer-approved extracted entries
   GET  /api/ping                       test watsonx connection
   GET  /api/models                     list available foundation models
 """
@@ -142,6 +142,18 @@ class IngestRequest(BaseModel):
     title: str = "Untitled document"
 
 
+class DocumentIn(BaseModel):
+    id: str
+    title: str = "Untitled document"
+    rawText: str = ""
+    createdAt: int
+
+
+class CommitRequest(BaseModel):
+    document: DocumentIn
+    assets: list[AssetIn] = []
+
+
 # ── Custom persona endpoint ───────────────────────────────────────────────────
 
 @app.post("/api/personas/custom")
@@ -250,9 +262,14 @@ def delete_asset(world_id: str, asset_id: int):
     return {"deleted": True}
 
 
-# ── Ingestion endpoint (Feature 1: script/doc → auto-breakdown) ─────────────
+# ── Ingestion endpoints (Feature 1: script/doc → auto-breakdown) ─────────────
 
-@app.post("/api/worlds/{world_id}/ingest", status_code=201)
+# Extraction is deliberately READ-ONLY: it returns proposed entries without
+# writing anything. Nothing enters the World Book until the writer approves
+# it via /ingest/commit below. This keeps the AI from silently editing the
+# writer's canon, and means re-running an extraction has no side effects.
+
+@app.post("/api/worlds/{world_id}/ingest")
 async def ingest_document(world_id: str, body: IngestRequest):
     world = _require_world(world_id)
 
@@ -274,37 +291,35 @@ async def ingest_document(world_id: str, body: IngestRequest):
 
     extraction = ing.normalize_extraction(raw, world)
 
-    document = db.create_document({
+    # The document is described here but NOT inserted — it's created lazily on
+    # first commit, so abandoned extractions don't leave orphan rows behind.
+    document = {
         "id": f"doc-{int(time.time() * 1000)}-{random.randint(0, 999)}",
-        "world_id": world_id,
+        "worldId": world_id,
         "title": (body.title or "Untitled document").strip() or "Untitled document",
-        "raw_text": text,
-        "created_at": int(time.time() * 1000),
-    })
+        "rawText": text,
+        "createdAt": int(time.time() * 1000),
+    }
 
-    created: list[dict] = []
+    proposed: list[dict] = []
     matches: list[dict] = []
+    index = 0
 
     for category, asset_type in ing.EXTRACT_TYPES.items():
         for raw_item in extraction.get(category, []):
-            item = ing.normalize_extracted_item(raw_item, world, asset_type)
+            item = ing.normalize_extracted_item(raw_item, world, asset_type, index)
+            index += 1
             existing = db.find_asset_by_name(world_id, item["title"], asset_type)
             if existing:
-                # Match found — never silently overwrite established canon.
-                # Attach the source document for traceability and surface
-                # both versions so the writer can decide whether to update
-                # the existing entry by hand.
-                linked = db.update_asset(existing["id"], {"source_document_id": document["id"]})
-                matches.append({"existing": linked, "extracted": item})
+                # Name collision with established canon — surface both versions
+                # side by side and let the writer decide. Nothing is overwritten.
+                matches.append({"existing": existing, "extracted": item})
             else:
-                item["status"] = "unconfirmed"
-                item["source_document_id"] = document["id"]
-                saved = db.create_asset(world_id, item)
-                created.append(saved)
+                proposed.append(item)
 
     result = {
         "document": document,
-        "created": created,
+        "proposed": proposed,
         "matches": matches,
         "timelineMarkers": extraction.get("timelineMarkers", []),
         "relationships": extraction.get("relationships", []),
@@ -314,13 +329,38 @@ async def ingest_document(world_id: str, body: IngestRequest):
     return result
 
 
-@app.post("/api/worlds/{world_id}/assets/{asset_id}/confirm")
-def confirm_asset(world_id: str, asset_id: int):
+@app.post("/api/worlds/{world_id}/ingest/commit", status_code=201)
+def commit_ingested(world_id: str, body: CommitRequest):
+    """Persist writer-approved entries from a staged extraction.
+
+    Accepts one or many assets so the UI can support both per-item approval
+    and an 'approve all' action. The source document row is created here on
+    first commit (idempotent — later commits from the same extraction reuse it).
+    """
     _require_world(world_id)
-    asset = db.get_asset(asset_id)
-    if not asset or asset["worldId"] != world_id:
-        raise HTTPException(status_code=404, detail="Asset not found in this world")
-    return db.update_asset(asset_id, {"status": "confirmed"})
+
+    if not body.assets:
+        raise HTTPException(400, "no assets to commit")
+
+    doc = body.document
+    if not db.get_document(doc.id):
+        db.create_document({
+            "id": doc.id,
+            "world_id": world_id,
+            "title": doc.title,
+            "raw_text": doc.rawText,
+            "created_at": doc.createdAt,
+        })
+
+    saved: list[dict] = []
+    for asset in body.assets:
+        data = asset.model_dump()
+        # Approved by a human at this point, so it lands as confirmed canon.
+        data["status"] = "confirmed"
+        data["source_document_id"] = doc.id
+        saved.append(db.create_asset(world_id, data))
+
+    return {"created": saved}
 
 
 # ── Generation endpoint ───────────────────────────────────────────────────────

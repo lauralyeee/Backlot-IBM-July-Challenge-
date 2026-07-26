@@ -40,15 +40,23 @@ export const deleteAsset = (worldId, assetId) =>
 // ── Ingestion (Feature 1: script/doc → auto-breakdown) ──────────────────────
 
 /**
+ * Read-only: extracts and diffs, but writes nothing. Approve entries with
+ * commitIngested() below to actually add them to the World Book.
  * @param {string} worldId
  * @param {{text: string, title?: string}} doc
- * @returns {{ document, created, matches, timelineMarkers, relationships, offline? }}
+ * @returns {{ document, proposed, matches, timelineMarkers, relationships, offline? }}
  */
 export const ingestText = (worldId, doc) =>
   req("POST", `/worlds/${worldId}/ingest`, { text: doc.text, title: doc.title || "Untitled document" });
 
-export const confirmAsset = (worldId, assetId) =>
-  req("POST", `/worlds/${worldId}/assets/${assetId}/confirm`);
+/**
+ * @param {string} worldId
+ * @param {object} document  the staged document object returned by ingestText
+ * @param {Array}  assets    one or more approved entries to persist
+ * @returns {{ created: Array }}
+ */
+export const commitIngested = (worldId, document, assets) =>
+  req("POST", `/worlds/${worldId}/ingest/commit`, { document, assets });
 
 // ── Generation ─────────────────────────────────────────────────────────────
 

@@ -1,7 +1,7 @@
 import { TYPE_META } from "../lib/worldData";
 import { Tag } from "./ui";
 
-export default function AssetCard({ asset, onClick, compact, actions }) {
+export default function AssetCard({ asset, onClick, compact }) {
   const meta = TYPE_META[asset.type] || { icon: "📄", label: asset.type };
   return (
     <div
@@ -14,10 +14,7 @@ export default function AssetCard({ asset, onClick, compact, actions }) {
           <span style={{ fontSize: 18 }}>{meta.icon}</span>
           <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 16.5, lineHeight: 1.3 }}>{asset.title}</div>
         </div>
-        <div style={{ display: "flex", gap: 6 }}>
-          {asset.status === "unconfirmed" && <span className="badge-unconfirmed">unconfirmed</span>}
-          {asset.offline && <span className="badge-offline">offline draft</span>}
-        </div>
+        {asset.offline && <span className="badge-offline">offline draft</span>}
       </div>
       {!compact && (
         <p style={{ fontSize: 14, lineHeight: 1.6, color: "var(--text-dim)", margin: 0, flex: 1 }}>
@@ -30,7 +27,6 @@ export default function AssetCard({ asset, onClick, compact, actions }) {
         {asset.faction !== "—" && <Tag>{asset.faction}</Tag>}
         <Tag>{asset.mood}</Tag>
       </div>
-      {actions && <div style={{ display: "flex", gap: 8, marginTop: 4 }}>{actions}</div>}
     </div>
   );
 }

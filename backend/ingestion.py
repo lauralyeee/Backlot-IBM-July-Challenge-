@@ -69,19 +69,26 @@ def _first(v, d):
     return v.strip() if isinstance(v, str) and v.strip() else d
 
 
-def normalize_extracted_item(raw: dict, world: dict, type_: str) -> dict:
+def normalize_extracted_item(raw: dict, world: dict, type_: str, index: int = 0) -> dict:
     """Same shape/defaults as generation.normalize_asset(), but for an
-    extraction-category item with an explicit (non-model-chosen) type."""
+    extraction-category item with an explicit (non-model-chosen) type.
+
+    `index` is added to the generated id so a single extraction can't produce
+    two items with the same id — these ids are handed to the client as React
+    keys before anything is persisted, so uniqueness matters even for items
+    the user never approves.
+    """
     eras = world.get("eras", [])
+    now = int(time.time() * 1000)
     return {
-        "id": int(time.time() * 1000) + random.randint(0, 999),
+        "id": now + index * 1000 + random.randint(0, 999),
         "title": _first(raw.get("title"), "Unnamed entry"),
         "type": type_ if type_ in TYPES else "lore",
         "era": raw.get("era") if raw.get("era") in eras else (eras[0] if eras else ""),
         "faction": _first(raw.get("faction"), "—"),
         "mood": _first(raw.get("mood"), "neutral"),
         "content": _first(raw.get("content"), "No description was extracted."),
-        "createdAt": int(time.time() * 1000),
+        "createdAt": now,
     }
 
 
@@ -115,27 +122,57 @@ def normalize_extraction(raw: dict, world: dict) -> dict:
 
 # ── Offline fallback (mirrors generation.offline_asset) ─────────────────────
 
-_CAPITALIZED_RUN = re.compile(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})\b")
+# Negative lookahead on a trailing apostrophe keeps contractions like "Don't"
+# or "It's" from being sliced into a bare "Don" / "It".
+_CAPITALIZED_RUN = re.compile(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})\b(?!['’]\w)")
 _TIMELINE_PHRASES = re.compile(
     r"\b(\d+\s+years?\s+(?:later|earlier|ago)|in the old \w+|the next (?:day|morning|year))\b",
     re.IGNORECASE,
 )
+
+# Common words that end up capitalized at the start of a sentence — pronouns,
+# articles, conjunctions, prepositions, auxiliary verbs, question words — none
+# of which are ever character/location names. Filtered by exact word (not
+# substring), case-insensitive, so this only ever drops these specific words.
+_STOPWORDS = frozenset({
+    "i", "he", "she", "his", "her", "him", "hers", "they", "their", "theirs", "them",
+    "we", "us", "our", "ours", "you", "your", "yours", "it", "its", "this", "that",
+    "these", "those", "the", "a", "an", "and", "but", "or", "nor", "so", "yet", "for",
+    "through", "with", "without", "from", "when", "while", "then", "now", "after",
+    "before", "during", "until", "because", "although", "though", "if", "as", "at",
+    "by", "in", "on", "of", "to", "up", "down", "out", "over", "under", "about",
+    "above", "below", "between", "among", "into", "onto", "upon", "not", "no", "yes",
+    "don", "doesn", "didn", "wasn", "weren", "isn", "aren", "won", "can", "could",
+    "should", "would", "will", "shall", "may", "might", "must", "also", "just",
+    "only", "even", "still", "again", "here", "there", "where", "why", "how",
+    "what", "who", "whom", "whose", "which", "there's", "here's",
+})
 
 
 def offline_extraction(text: str, world: dict) -> dict:
     """Best-effort local extraction when watsonx is unreachable — regex-based
     proper-noun spotting rather than any real NLP. Everything it produces
     lands as an unconfirmed asset anyway, so a rough draft here is safe;
-    the writer reviews/approves before anything counts as canon."""
-    names = []
-    seen = set()
+    the writer reviews/approves before anything counts as canon. Still worth
+    filtering out the obvious junk (pronouns, articles, contractions) so the
+    review queue isn't swamped with words that are never names."""
+    counts: dict = {}
+    first_seen: dict = {}
     for m in _CAPITALIZED_RUN.finditer(text):
         name = m.group(1).strip()
         key = name.lower()
-        if key in seen or len(name) < 3:
+        if len(name) < 3 or key in _STOPWORDS:
             continue
-        seen.add(key)
-        names.append(name)
+        counts[key] = counts.get(key, 0) + 1
+        first_seen.setdefault(key, name)
+
+    names = [
+        first_seen[key]
+        for key, n in counts.items()
+        # Multi-word runs are strong signals on their own; single words need
+        # to recur at least twice to count as a probable recurring name.
+        if (" " in first_seen[key]) or n >= 2
+    ]
 
     eras = world.get("eras", [""])
     characters = [
