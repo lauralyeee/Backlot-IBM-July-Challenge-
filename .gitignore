@@ -23,6 +23,13 @@ dist-ssr
 *.sln
 *.sw?
 
+
+__pycache__/
+*.pyc
+backend/worldbuilding.db
+backend/worldbuilding.db-shm
+backend/worldbuilding.db-wal
+
 # Environment variables
 # .env
 # .env.*
