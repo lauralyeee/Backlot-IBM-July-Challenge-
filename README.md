@@ -1,0 +1,81 @@
+# Worldbuilding Co-Pilot
+
+AI worldbuilding assistant built on IBM Granite via watsonx.ai, for the IBM AI Builders Challenge (July 2026, Creative Industries theme).
+
+## Architecture
+
+| Layer            | Technology                               |
+|------------------|------------------------------------------|
+| Frontend         | React 19 + Vite 8 (src/)                |
+| Backend          | FastAPI (Python) — backend/             |
+| LLM              | IBM Granite via watsonx.ai               |
+| Structured store | SQLite (backend/worldbuilding.db)        |
+| Retrieval        | Custom term-overlap relevance scorer     |
+| Voice            | Browser Web Speech API                   |
+
+### Design decisions
+
+- **Credentials server-side only.** `WATSONX_API_KEY` and `WATSONX_PROJECT_ID` live in `backend/.env` and are never sent to the browser. The frontend calls `/api/*` → Vite proxy → FastAPI backend, which holds all IBM credentials.
+- **Custom retrieval, no LangChain.** The retrieval layer (`backend/retrieval.py`) is a lightweight weighted term-overlap scorer — same algorithm as `src/lib/retrieval.js` but now running server-side before every generation call. Swappable behind the same interface if a vector store is added later.
+- **SQLite, not localStorage.** World state (worlds, assets) persists in SQLite. The only thing still in `localStorage` is non-sensitive UI state (world ID reference + dark/light mode).
+- **Two-pass generation.** Content is generated in one call; a second lightweight classification call then independently assigns `type`, `era`, `faction`, and `mood` tags (Tier 2 auto-tagging, best-effort).
+
+## Running locally
+
+### Prerequisites
+
+- Node.js 18+
+- Python 3.11+
+- An IBM Cloud account with a watsonx.ai project and API key
+
+### Backend
+
+```bash
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env
+# Edit .env: set WATSONX_API_KEY and WATSONX_PROJECT_ID
+uvicorn main:app --reload --port 8000
+```
+
+### Frontend
+
+```bash
+# In the project root
+npm install
+npm run dev
+```
+
+Open http://localhost:5173. The Vite dev server proxies `/api/*` to the backend on port 8000.
+
+## API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | /api/worlds | Create world + seed assets |
+| GET | /api/worlds/{id} | Get world metadata |
+| PATCH | /api/worlds/{id} | Update world metadata |
+| GET | /api/worlds/{id}/assets | List assets (optional ?type=) |
+| POST | /api/worlds/{id}/assets | Save an asset |
+| POST | /api/worlds/{id}/generate | Generate (expand / character / era_shift) |
+| POST | /api/worlds/{id}/audit | Consistency audit |
+| POST | /api/worlds/{id}/ask | Q&A (lore or character chat) |
+| GET | /api/ping | Test watsonx connection |
+| GET | /api/models | List available foundation models |
+
+## Model chain
+
+The backend uses `ibm/granite-4-h-small` → `ibm/granite-3-3-8b-instruct` (see `MODEL_CHAIN` in `backend/watsonx.py`). IBM periodically deprecates model IDs. If you see "model not found" errors, call `GET /api/models` to see what's currently available on your project and update `MODEL_CHAIN`.
+
+## Screens
+
+| Screen | Feature |
+|--------|---------|
+| Home | Landing — quick-start cards, recent entries, stats |
+| World Book | Canon library, search/filter, consistency audit |
+| Add to World | Gap-Filling Engine (expand idea or generate character), grounding context panel |
+| Characters | NPC cast generator, lore Q&A, character chat with Web Speech voice |
+| Timeline | Time-Shift Mode — re-render any entry in another era |
+| Settings | Connection test, roles, persona, theme, world name, reset |

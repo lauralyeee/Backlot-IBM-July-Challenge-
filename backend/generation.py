@@ -1,0 +1,129 @@
+"""
+Server-side generation helpers — port of src/lib/generation.js.
+
+Keeps prompt construction in one place so every API endpoint
+that calls generate() gets consistent system prompts + schema.
+"""
+
+import re
+import time
+import random
+
+TYPES = ["lore", "character", "location", "faction", "event"]
+
+
+def persona_system(world: dict) -> str:
+    roles = world.get("rolesFull") or []
+    voices = "; and ".join(r["voice"] for r in roles)
+    role_names = " and ".join(r["label"].lower() for r in roles)
+    return (
+        f'You are the resident {world["personaLabel"]} of the world "{world["name"]}". '
+        f"Your audience is a {role_names}, so blend these needs: {voices}. "
+        "You are the guardian of canon: everything you produce must stay consistent with "
+        "the established canon provided and must never contradict it. "
+        "Write original material in clear, accessible language."
+    )
+
+
+def schema_for(world: dict) -> str:
+    eras = "|".join(world["eras"])
+    types = "|".join(TYPES)
+    return (
+        "Output must be a single JSON object and nothing else — no explanation, no markdown. "
+        f'Keys: "title" (short evocative name), "type" ({types}), "era" ({eras}), '
+        '"faction" (an established faction or "—"), "mood" (one lowercase word), '
+        '"content" (60-140 words). Begin your response with { and end with }.'
+    )
+
+
+def normalize_asset(raw: dict, world: dict, fallback_type: str | None = None) -> dict:
+    def first(v, d):
+        return v.strip() if isinstance(v, str) and v.strip() else d
+
+    eras = world.get("eras", [])
+    return {
+        "id": int(time.time() * 1000) + random.randint(0, 999),
+        "title": first(raw.get("title"), "Untitled entry"),
+        "type": raw.get("type") if raw.get("type") in TYPES else (fallback_type or "lore"),
+        "era": raw.get("era") if raw.get("era") in eras else (eras[0] if eras else ""),
+        "faction": first(raw.get("faction"), "—"),
+        "mood": first(raw.get("mood"), "neutral"),
+        "content": first(raw.get("content"), "No description was returned."),
+        "createdAt": int(time.time() * 1000),
+    }
+
+
+# ── Offline fallbacks (mirror of generation.js) ───────────────────────────
+
+def _pick(arr, seed):
+    return arr[abs(seed) % len(arr)]
+
+
+def offline_asset(idea: str, world: dict, assets: list[dict], force_type: str | None = None) -> dict:
+    seed = len(idea) + len(assets)
+    related = _pick(assets, seed) if assets else None
+    title = " ".join(idea.split("—")[0].split(".,")[0].split()[:5]).capitalize() or "New entry"
+    openers = [
+        "Established in the world's records as",
+        "Known throughout these lands as",
+        "Spoken of in the older accounts as",
+    ]
+    links = f" Its history runs alongside {related['title']}, and the two are rarely discussed apart." if related else ""
+    is_char = bool(re.search(r"who|person|keeper|captain|king|queen|warden", idea, re.I))
+    return {
+        "id": int(time.time() * 1000) + random.randint(0, 999),
+        "title": title,
+        "type": force_type or ("character" if is_char else "location"),
+        "era": _pick(world.get("eras", [""]), seed),
+        "faction": related["faction"] if (related and related.get("faction") != "—") else "—",
+        "mood": "unsettled",
+        "content": f"{_pick(openers, seed)}: {idea}.{links} Drafted offline — reopen when the service is back.",
+        "offline": True,
+        "createdAt": int(time.time() * 1000),
+    }
+
+
+def offline_answer(question: str, assets: list[dict]) -> str:
+    import re as _re
+    words = [w for w in _re.sub(r"\W+", " ", question.lower()).split() if len(w) > 3]
+    scored = sorted(
+        [
+            (a, sum(1 for w in words if w in (a["title"] + " " + a["content"]).lower()))
+            for a in assets
+        ],
+        key=lambda x: x[1],
+        reverse=True,
+    )
+    scored = [(a, s) for a, s in scored if s > 0]
+    if not scored:
+        return (
+            "Nothing in your World Book covers that yet — "
+            "which makes it a gap worth filling. (Answered offline, from your entries only.)"
+        )
+    top = "\n\n".join(f"{a['title']}: {a['content']}" for a, _ in scored[:2])
+    return f"From your World Book:\n\n{top}\n\n(Answered offline, by searching your entries.)"
+
+
+def offline_audit(assets: list[dict]) -> dict:
+    issues = []
+    seen: dict = {}
+    for a in assets:
+        key = a["title"].lower()
+        if key in seen:
+            issues.append({
+                "severity": "low",
+                "entries": [seen[key]["title"], a["title"]],
+                "issue": "Two entries share the same name, which may confuse your canon.",
+            })
+        seen[key] = a
+    factions = {a["title"] for a in assets if a["type"] == "faction"}
+    for a in assets:
+        if a["faction"] != "—" and a["faction"] not in factions and any(b["type"] == "faction" for b in assets):
+            issues.append({
+                "severity": "low",
+                "entries": [a["title"]],
+                "issue": f'Belongs to "{a["faction"]}", which has no entry of its own yet.',
+            })
+    return {"issues": issues, "offline": True}
+
+
