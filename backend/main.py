@@ -12,6 +12,8 @@ Endpoints:
   POST /api/worlds/{id}/audit          consistency audit
   POST /api/worlds/{id}/ask            Q&A (lore or character-in-character)
   POST /api/personas/custom            generate a persona from a free-text description
+  POST /api/worlds/{id}/ingest         script/doc → extracted proposals (read-only, Feature 1)
+  POST /api/worlds/{id}/ingest/commit  persist writer-approved extracted entries
   GET  /api/ping                       test watsonx connection
   GET  /api/models                     list available foundation models
 """
@@ -19,6 +21,8 @@ Endpoints:
 from __future__ import annotations
 
 import os
+import random
+import time
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -33,6 +37,7 @@ import db
 import watsonx as wx
 import retrieval as ret
 import generation as gen
+import ingestion as ing
 
 # ── App lifecycle ────────────────────────────────────────────────────────────
 
@@ -130,6 +135,23 @@ class AuditRequest(BaseModel):
 
 class CustomPersonaRequest(BaseModel):
     description: str
+
+
+class IngestRequest(BaseModel):
+    text: str
+    title: str = "Untitled document"
+
+
+class DocumentIn(BaseModel):
+    id: str
+    title: str = "Untitled document"
+    rawText: str = ""
+    createdAt: int
+
+
+class CommitRequest(BaseModel):
+    document: DocumentIn
+    assets: list[AssetIn] = []
 
 
 # ── Custom persona endpoint ───────────────────────────────────────────────────
@@ -238,6 +260,107 @@ def delete_asset(world_id: str, asset_id: int):
         raise HTTPException(status_code=404, detail="Asset not found in this world")
     db.delete_asset(asset_id)
     return {"deleted": True}
+
+
+# ── Ingestion endpoints (Feature 1: script/doc → auto-breakdown) ─────────────
+
+# Extraction is deliberately READ-ONLY: it returns proposed entries without
+# writing anything. Nothing enters the World Book until the writer approves
+# it via /ingest/commit below. This keeps the AI from silently editing the
+# writer's canon, and means re-running an extraction has no side effects.
+
+@app.post("/api/worlds/{world_id}/ingest")
+async def ingest_document(world_id: str, body: IngestRequest):
+    world = _require_world(world_id)
+
+    text = body.text.strip()
+    if not text:
+        raise HTTPException(400, "text is required")
+
+    offline = False
+    try:
+        raw_text = await wx.generate(
+            ing.extraction_system_prompt(world),
+            ing.extraction_user_prompt(text, world),
+            max_tokens=1800,
+        )
+        raw = wx.parse_json(raw_text)
+    except Exception:
+        raw = ing.offline_extraction(text, world)
+        offline = True
+
+    extraction = ing.normalize_extraction(raw, world)
+
+    # The document is described here but NOT inserted — it's created lazily on
+    # first commit, so abandoned extractions don't leave orphan rows behind.
+    document = {
+        "id": f"doc-{int(time.time() * 1000)}-{random.randint(0, 999)}",
+        "worldId": world_id,
+        "title": (body.title or "Untitled document").strip() or "Untitled document",
+        "rawText": text,
+        "createdAt": int(time.time() * 1000),
+    }
+
+    proposed: list[dict] = []
+    matches: list[dict] = []
+    index = 0
+
+    for category, asset_type in ing.EXTRACT_TYPES.items():
+        for raw_item in extraction.get(category, []):
+            item = ing.normalize_extracted_item(raw_item, world, asset_type, index)
+            index += 1
+            existing = db.find_asset_by_name(world_id, item["title"], asset_type)
+            if existing:
+                # Name collision with established canon — surface both versions
+                # side by side and let the writer decide. Nothing is overwritten.
+                matches.append({"existing": existing, "extracted": item})
+            else:
+                proposed.append(item)
+
+    result = {
+        "document": document,
+        "proposed": proposed,
+        "matches": matches,
+        "timelineMarkers": extraction.get("timelineMarkers", []),
+        "relationships": extraction.get("relationships", []),
+    }
+    if offline:
+        result["offline"] = True
+    return result
+
+
+@app.post("/api/worlds/{world_id}/ingest/commit", status_code=201)
+def commit_ingested(world_id: str, body: CommitRequest):
+    """Persist writer-approved entries from a staged extraction.
+
+    Accepts one or many assets so the UI can support both per-item approval
+    and an 'approve all' action. The source document row is created here on
+    first commit (idempotent — later commits from the same extraction reuse it).
+    """
+    _require_world(world_id)
+
+    if not body.assets:
+        raise HTTPException(400, "no assets to commit")
+
+    doc = body.document
+    if not db.get_document(doc.id):
+        db.create_document({
+            "id": doc.id,
+            "world_id": world_id,
+            "title": doc.title,
+            "raw_text": doc.rawText,
+            "created_at": doc.createdAt,
+        })
+
+    saved: list[dict] = []
+    for asset in body.assets:
+        data = asset.model_dump()
+        # Approved by a human at this point, so it lands as confirmed canon.
+        data["status"] = "confirmed"
+        data["source_document_id"] = doc.id
+        saved.append(db.create_asset(world_id, data))
+
+    return {"created": saved}
 
 
 # ── Generation endpoint ───────────────────────────────────────────────────────

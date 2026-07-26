@@ -317,6 +317,12 @@ textarea.field { resize: vertical; font-family: var(--font-body); }
   background: var(--danger-soft); color: var(--danger); border: 1px solid var(--danger);
 }
 
+/* Ingested entry staged for review — not yet part of the World Book. */
+.badge-proposed {
+  font-size: 11px; padding: 3px 8px; border-radius: 6px; white-space: nowrap;
+  background: var(--accent-soft); color: var(--accent-strong); border: 1px solid var(--accent);
+}
+
 .section-label {
   font-size: 12px;
   text-transform: uppercase;

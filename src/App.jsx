@@ -167,7 +167,7 @@ export default function App() {
           {tab === "create" && <Create world={worldFull} assets={assets} addAsset={addAsset} />}
           {tab === "characters" && <Characters world={worldFull} assets={assets} addAsset={addAsset} />}
           {tab === "timeline" && <Timeline world={worldFull} assets={assets} addAsset={addAsset} />}
-          {tab === "import" && <Import />}
+          {tab === "import" && <Import world={worldFull} addAsset={addAsset} />}
           {tab === "export" && <Export />}
           {tab === "settings" && (
             <Settings
