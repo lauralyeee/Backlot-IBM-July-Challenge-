@@ -37,6 +37,19 @@ export const saveAsset = (worldId, asset) =>
 export const deleteAsset = (worldId, assetId) =>
   req("DELETE", `/worlds/${worldId}/assets/${assetId}`);
 
+// ── Ingestion (Feature 1: script/doc → auto-breakdown) ──────────────────────
+
+/**
+ * @param {string} worldId
+ * @param {{text: string, title?: string}} doc
+ * @returns {{ document, created, matches, timelineMarkers, relationships, offline? }}
+ */
+export const ingestText = (worldId, doc) =>
+  req("POST", `/worlds/${worldId}/ingest`, { text: doc.text, title: doc.title || "Untitled document" });
+
+export const confirmAsset = (worldId, assetId) =>
+  req("POST", `/worlds/${worldId}/assets/${assetId}/confirm`);
+
 // ── Generation ─────────────────────────────────────────────────────────────
 
 /**

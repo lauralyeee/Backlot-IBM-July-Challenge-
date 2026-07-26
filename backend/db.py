@@ -48,12 +48,30 @@ def init_db():
 
             CREATE INDEX IF NOT EXISTS idx_assets_world ON assets(world_id);
             CREATE INDEX IF NOT EXISTS idx_assets_type  ON assets(world_id, type);
+
+            CREATE TABLE IF NOT EXISTS documents (
+                id          TEXT PRIMARY KEY,
+                world_id    TEXT NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+                title       TEXT NOT NULL,
+                raw_text    TEXT NOT NULL,
+                created_at  INTEGER NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_documents_world ON documents(world_id);
         """)
         # Migration: add source_asset_id column if it doesn't exist yet
         # (safe to run every startup — ALTER TABLE is a no-op when already present)
         existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(assets)").fetchall()}
         if "source_asset_id" not in existing_cols:
             conn.execute("ALTER TABLE assets ADD COLUMN source_asset_id INTEGER DEFAULT NULL")
+        # Migration: status ("confirmed" | "unconfirmed") + source_document_id,
+        # added for Feature 1 (script ingestion). Same additive pattern as
+        # source_asset_id above — Feature 3 (The Loop) reuses source_document_id
+        # for its own re-import/re-export sync, so it doesn't need its own migration.
+        if "status" not in existing_cols:
+            conn.execute("ALTER TABLE assets ADD COLUMN status TEXT NOT NULL DEFAULT 'confirmed'")
+        if "source_document_id" not in existing_cols:
+            conn.execute("ALTER TABLE assets ADD COLUMN source_document_id TEXT DEFAULT NULL")
 
 
 # ── Worlds ──────────────────────────────────────────────────────────────────
@@ -132,8 +150,8 @@ def _row_to_world(row) -> dict:
 def create_asset(world_id: str, data: dict) -> dict:
     with _connect() as conn:
         conn.execute(
-            """INSERT INTO assets (id, world_id, title, type, era, faction, mood, content, offline, created_at, source_asset_id)
-               VALUES (:id, :world_id, :title, :type, :era, :faction, :mood, :content, :offline, :created_at, :source_asset_id)""",
+            """INSERT INTO assets (id, world_id, title, type, era, faction, mood, content, offline, created_at, source_asset_id, status, source_document_id)
+               VALUES (:id, :world_id, :title, :type, :era, :faction, :mood, :content, :offline, :created_at, :source_asset_id, :status, :source_document_id)""",
             {
                 "id": data["id"],
                 "world_id": world_id,
@@ -146,6 +164,8 @@ def create_asset(world_id: str, data: dict) -> dict:
                 "offline": 1 if data.get("offline") else 0,
                 "created_at": data["createdAt"],
                 "source_asset_id": data.get("source_asset_id"),
+                "status": data.get("status", "confirmed"),
+                "source_document_id": data.get("source_document_id"),
             },
         )
     return get_asset(data["id"])
@@ -197,6 +217,8 @@ def update_asset(asset_id: int, data: dict) -> dict:
         "mood": "mood",
         "content": "content",
         "offline": "offline",
+        "status": "status",
+        "source_document_id": "source_document_id",
     }
     for key, col in mapping.items():
         if key in data:
@@ -230,10 +252,62 @@ def _row_to_asset(row) -> dict:
         "mood": row["mood"],
         "content": row["content"],
         "createdAt": row["created_at"],
+        "status": row["status"],
     }
     if row["offline"]:
         result["offline"] = True
     src = row["source_asset_id"]
     if src is not None:
         result["sourceAssetId"] = src
+    src_doc = row["source_document_id"]
+    if src_doc is not None:
+        result["sourceDocumentId"] = src_doc
     return result
+
+
+# ── Documents (Feature 1: script/doc ingestion) ──────────────────────────────
+
+def create_document(data: dict) -> dict:
+    with _connect() as conn:
+        conn.execute(
+            """INSERT INTO documents (id, world_id, title, raw_text, created_at)
+               VALUES (:id, :world_id, :title, :raw_text, :created_at)""",
+            data,
+        )
+    return get_document(data["id"])
+
+
+def get_document(document_id: str) -> dict | None:
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM documents WHERE id = ?", (document_id,)).fetchone()
+    return _row_to_document(row) if row else None
+
+
+def list_documents(world_id: str) -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM documents WHERE world_id = ? ORDER BY created_at DESC", (world_id,)
+        ).fetchall()
+    return [_row_to_document(r) for r in rows]
+
+
+def _row_to_document(row) -> dict:
+    return {
+        "id": row["id"],
+        "worldId": row["world_id"],
+        "title": row["title"],
+        "rawText": row["raw_text"],
+        "createdAt": row["created_at"],
+    }
+
+
+def find_asset_by_name(world_id: str, title: str, type_: str) -> dict | None:
+    """Case-insensitive exact-name match within a type, used by ingestion's
+    diff step (Feature 1). A simple v1 — swap for fuzzy/similarity matching
+    later without changing callers."""
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM assets WHERE world_id = ? AND type = ? AND LOWER(title) = LOWER(?) LIMIT 1",
+            (world_id, type_, title),
+        ).fetchone()
+    return _row_to_asset(row) if row else None

@@ -12,6 +12,8 @@ Endpoints:
   POST /api/worlds/{id}/audit          consistency audit
   POST /api/worlds/{id}/ask            Q&A (lore or character-in-character)
   POST /api/personas/custom            generate a persona from a free-text description
+  POST /api/worlds/{id}/ingest         script/doc ingestion → auto-breakdown (Feature 1)
+  POST /api/worlds/{id}/assets/{aid}/confirm   approve an unconfirmed ingested asset
   GET  /api/ping                       test watsonx connection
   GET  /api/models                     list available foundation models
 """
@@ -19,6 +21,8 @@ Endpoints:
 from __future__ import annotations
 
 import os
+import random
+import time
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -33,6 +37,7 @@ import db
 import watsonx as wx
 import retrieval as ret
 import generation as gen
+import ingestion as ing
 
 # ── App lifecycle ────────────────────────────────────────────────────────────
 
@@ -130,6 +135,11 @@ class AuditRequest(BaseModel):
 
 class CustomPersonaRequest(BaseModel):
     description: str
+
+
+class IngestRequest(BaseModel):
+    text: str
+    title: str = "Untitled document"
 
 
 # ── Custom persona endpoint ───────────────────────────────────────────────────
@@ -238,6 +248,79 @@ def delete_asset(world_id: str, asset_id: int):
         raise HTTPException(status_code=404, detail="Asset not found in this world")
     db.delete_asset(asset_id)
     return {"deleted": True}
+
+
+# ── Ingestion endpoint (Feature 1: script/doc → auto-breakdown) ─────────────
+
+@app.post("/api/worlds/{world_id}/ingest", status_code=201)
+async def ingest_document(world_id: str, body: IngestRequest):
+    world = _require_world(world_id)
+
+    text = body.text.strip()
+    if not text:
+        raise HTTPException(400, "text is required")
+
+    offline = False
+    try:
+        raw_text = await wx.generate(
+            ing.extraction_system_prompt(world),
+            ing.extraction_user_prompt(text, world),
+            max_tokens=1800,
+        )
+        raw = wx.parse_json(raw_text)
+    except Exception:
+        raw = ing.offline_extraction(text, world)
+        offline = True
+
+    extraction = ing.normalize_extraction(raw, world)
+
+    document = db.create_document({
+        "id": f"doc-{int(time.time() * 1000)}-{random.randint(0, 999)}",
+        "world_id": world_id,
+        "title": (body.title or "Untitled document").strip() or "Untitled document",
+        "raw_text": text,
+        "created_at": int(time.time() * 1000),
+    })
+
+    created: list[dict] = []
+    matches: list[dict] = []
+
+    for category, asset_type in ing.EXTRACT_TYPES.items():
+        for raw_item in extraction.get(category, []):
+            item = ing.normalize_extracted_item(raw_item, world, asset_type)
+            existing = db.find_asset_by_name(world_id, item["title"], asset_type)
+            if existing:
+                # Match found — never silently overwrite established canon.
+                # Attach the source document for traceability and surface
+                # both versions so the writer can decide whether to update
+                # the existing entry by hand.
+                linked = db.update_asset(existing["id"], {"source_document_id": document["id"]})
+                matches.append({"existing": linked, "extracted": item})
+            else:
+                item["status"] = "unconfirmed"
+                item["source_document_id"] = document["id"]
+                saved = db.create_asset(world_id, item)
+                created.append(saved)
+
+    result = {
+        "document": document,
+        "created": created,
+        "matches": matches,
+        "timelineMarkers": extraction.get("timelineMarkers", []),
+        "relationships": extraction.get("relationships", []),
+    }
+    if offline:
+        result["offline"] = True
+    return result
+
+
+@app.post("/api/worlds/{world_id}/assets/{asset_id}/confirm")
+def confirm_asset(world_id: str, asset_id: int):
+    _require_world(world_id)
+    asset = db.get_asset(asset_id)
+    if not asset or asset["worldId"] != world_id:
+        raise HTTPException(status_code=404, detail="Asset not found in this world")
+    return db.update_asset(asset_id, {"status": "confirmed"})
 
 
 # ── Generation endpoint ───────────────────────────────────────────────────────
