@@ -34,6 +34,9 @@ export const listAssets = (worldId, type) =>
 export const saveAsset = (worldId, asset) =>
   req("POST", `/worlds/${worldId}/assets`, asset);
 
+export const deleteAsset = (worldId, assetId) =>
+  req("DELETE", `/worlds/${worldId}/assets/${assetId}`);
+
 // ── Generation ─────────────────────────────────────────────────────────────
 
 /**

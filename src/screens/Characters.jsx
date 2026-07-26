@@ -21,6 +21,7 @@ export default function Characters({ world, assets, addAsset }) {
   const [busy, setBusy] = useState(false);
   const [genBusy, setGenBusy] = useState(false);
   const [showNewCard, setShowNewCard] = useState(null);
+  const [npcPrompt, setNpcPrompt] = useState("");
   const scrollRef = useRef(null);
   const thread = threads[mode] || [];
   const activeChar = characters.find((c) => String(c.id) === mode);
@@ -30,13 +31,19 @@ export default function Characters({ world, assets, addAsset }) {
   }, [thread, busy]);
 
   async function generateNpc() {
+    const text = npcPrompt.trim();
     setGenBusy(true); setShowNewCard(null);
     try {
-      const res = await generateAsset(world.id, "character", {});
+      const res = await generateAsset(world.id, "character", { fragment: text });
       addAsset(res.asset); setShowNewCard(res.asset); setMode(String(res.asset.id));
+      setNpcPrompt("");
     } catch (e) {
-      const draftAsset = offlineAsset("a new figure connected to this world", world, assets, "character");
+      const draftAsset = offlineAsset(
+        text || "a new figure connected to this world",
+        world, assets, "character"
+      );
       addAsset(draftAsset); setShowNewCard(draftAsset); setMode(String(draftAsset.id));
+      setNpcPrompt("");
     }
     setGenBusy(false);
   }
@@ -66,6 +73,13 @@ export default function Characters({ world, assets, addAsset }) {
           <h1 style={{ fontSize: 22, marginBottom: 4 }}>Characters</h1>
           <p style={{ fontSize: 13.5, color: "var(--text-dim)" }}>Ask about the world, or chat with anyone you've created.</p>
         </div>
+        <Field
+          value={npcPrompt}
+          onChange={(e) => setNpcPrompt(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && !genBusy && generateNpc()}
+          placeholder="Or describe a character…"
+          style={{ marginBottom: 8 }}
+        />
         <Btn variant="primary" onClick={generateNpc} disabled={genBusy} style={{ marginBottom: 14, width: "100%", justifyContent: "center" }}>
           <IconPlus width={16} height={16} /> {genBusy ? "Creating…" : "Generate a new character"}
         </Btn>

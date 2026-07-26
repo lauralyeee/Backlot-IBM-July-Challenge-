@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { ROLES } from "./lib/worldData";
-import { createWorld, getWorld, patchWorld, listAssets, saveAsset } from "./lib/api";
+import { createWorld, getWorld, patchWorld, listAssets, saveAsset, deleteAsset } from "./lib/api";
 import Sidebar from "./components/Sidebar";
 import TopBar from "./components/TopBar";
 import Onboarding from "./screens/Onboarding";
@@ -65,9 +65,23 @@ export default function App() {
     saveUi({ worldId, mode: next });
   };
 
-  // Called by Create / Characters / Timeline when a new asset comes back from the API
+  // Called by Create / Characters / Timeline when a new asset comes back from the API.
+  // Era-shift re-generations update an existing DB row in place (same id) rather
+  // than creating a new one, so this must replace-by-id instead of blindly
+  // appending — otherwise the same entry shows up twice in the UI until reload.
   const addAsset = useCallback((a) => {
-    setAssets((prev) => [...prev, a]);
+    setAssets((prev) => {
+      const idx = prev.findIndex((p) => p.id === a.id);
+      if (idx === -1) return [...prev, a];
+      const next = [...prev];
+      next[idx] = a;
+      return next;
+    });
+  }, []);
+
+  // Called by WorldBook when a user deletes an asset
+  const removeAsset = useCallback((assetId) => {
+    setAssets((prev) => prev.filter((a) => a.id !== assetId));
   }, []);
 
   // Called by Settings when world metadata changes
@@ -145,7 +159,7 @@ export default function App() {
         <TopBar title={title} subtitle={subtitle} mode={mode} toggleTheme={toggleTheme} />
         <div className="content">
           {tab === "home" && <Home world={worldFull} assets={assets} setTab={setTab} />}
-          {tab === "canon" && <WorldBook world={worldFull} assets={assets} setTab={setTab} />}
+          {tab === "canon" && <WorldBook world={worldFull} assets={assets} setTab={setTab} removeAsset={removeAsset} />}
           {tab === "create" && <Create world={worldFull} assets={assets} addAsset={addAsset} />}
           {tab === "characters" && <Characters world={worldFull} assets={assets} addAsset={addAsset} />}
           {tab === "timeline" && <Timeline world={worldFull} assets={assets} addAsset={addAsset} />}

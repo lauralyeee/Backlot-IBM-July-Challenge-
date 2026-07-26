@@ -7,9 +7,11 @@ Endpoints:
   PATCH /api/worlds/{id}               update world metadata
   GET  /api/worlds/{id}/assets         list assets (optional ?type=)
   POST /api/worlds/{id}/assets         save a pre-built asset (used at onboarding seed)
+  DELETE /api/worlds/{id}/assets/{aid} delete an asset
   POST /api/worlds/{id}/generate       gap-fill / character / era-shift generation
   POST /api/worlds/{id}/audit          consistency audit
   POST /api/worlds/{id}/ask            Q&A (lore or character-in-character)
+  POST /api/personas/custom            generate a persona from a free-text description
   GET  /api/ping                       test watsonx connection
   GET  /api/models                     list available foundation models
 """
@@ -126,6 +128,59 @@ class AuditRequest(BaseModel):
     pass  # no body needed — uses all assets for the world
 
 
+class CustomPersonaRequest(BaseModel):
+    description: str
+
+
+# ── Custom persona endpoint ───────────────────────────────────────────────────
+
+@app.post("/api/personas/custom")
+async def generate_custom_persona(body: CustomPersonaRequest):
+    """Generate a persona object from a free-text world description."""
+    description = body.description.strip()
+    if not description:
+        raise HTTPException(400, "description is required")
+
+    system_prompt, user_prompt = gen.custom_persona_prompt(description)
+    try:
+        # Bumped from the 1000-token default: personaLabel + 3 eras + 4
+        # nameIdeas + 2-3 full seed entries (each up to 140 words) can run
+        # close to the old ceiling and get truncated into invalid JSON.
+        text = await wx.generate(system_prompt, user_prompt, max_tokens=1400)
+        raw = wx.parse_json(text)
+
+        persona_label = raw.get("personaLabel")
+        if not isinstance(persona_label, str) or not persona_label.strip():
+            persona_label = "Custom world"
+
+        eras = raw.get("eras")
+        if not (isinstance(eras, list) and len(eras) == 3 and all(isinstance(e, str) and e.strip() for e in eras)):
+            eras = ["Act One", "Act Two", "Act Three"]
+
+        name_ideas = raw.get("nameIdeas")
+        name_ideas = [n for n in name_ideas if isinstance(n, str) and n.strip()] if isinstance(name_ideas, list) else []
+
+        raw_seed = raw.get("seed") if isinstance(raw.get("seed"), list) else []
+        # Normalize every seed entry the same way the main /generate endpoint
+        # does, so a missing/invalid field from the model (most often a
+        # dropped "content") can't cause create_world() to silently skip
+        # that entry when the world is actually created.
+        seed = [
+            gen.normalize_seed_entry(s, eras)
+            for s in raw_seed
+            if isinstance(s, dict)
+        ][:3]
+
+        return {
+            "personaLabel": persona_label,
+            "eras": eras,
+            "nameIdeas": name_ideas,
+            "seed": seed,
+        }
+    except Exception as exc:
+        raise HTTPException(502, f"Persona generation failed: {exc}")
+
+
 # ── World endpoints ──────────────────────────────────────────────────────────
 
 @app.post("/api/worlds", status_code=201)
@@ -173,6 +228,18 @@ def save_asset(world_id: str, body: AssetIn):
     return db.create_asset(world_id, body.model_dump())
 
 
+@app.delete("/api/worlds/{world_id}/assets/{asset_id}", status_code=200)
+def delete_asset(world_id: str, asset_id: int):
+    _require_world(world_id)
+    asset = db.get_asset(asset_id)
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    if asset["worldId"] != world_id:
+        raise HTTPException(status_code=404, detail="Asset not found in this world")
+    db.delete_asset(asset_id)
+    return {"deleted": True}
+
+
 # ── Generation endpoint ───────────────────────────────────────────────────────
 
 @app.post("/api/worlds/{world_id}/generate")
@@ -202,17 +269,25 @@ async def generate_asset(world_id: str, body: GenerateRequest):
         )
         force_type = subject["type"]
     elif mode == "character":
-        query = "new character faction location"
+        fragment = (body.fragment or "").strip()
+        query = fragment if fragment else "new character faction location"
         system_prompt = (
             f"{gen.persona_system(world)}\n\n"
             f"ESTABLISHED CANON (retrieved as most relevant to this request):\n"
             f"{ret.canon_block(assets, query)}\n\n"
             f"{gen.schema_for(world)} The \"type\" must be \"character\"."
         )
-        user_prompt = (
-            "Create one new character who belongs organically in this world — "
-            "tied to an existing place, faction, or event. Do not duplicate existing characters."
-        )
+        if fragment:
+            user_prompt = (
+                f"Create one new character based on this idea: {fragment}. "
+                "They should belong organically in this world — tied to an existing place, "
+                "faction, or event. Do not duplicate existing characters."
+            )
+        else:
+            user_prompt = (
+                "Create one new character who belongs organically in this world — "
+                "tied to an existing place, faction, or event. Do not duplicate existing characters."
+            )
         force_type = "character"
     else:  # expand
         fragment = body.fragment
@@ -241,8 +316,46 @@ async def generate_asset(world_id: str, body: GenerateRequest):
         # Tier 2: auto-tagging — run a lightweight second-pass classification
         asset = await _auto_tag(asset, world, assets)
 
-        if mode == "era_shift" and body.era:
-            asset["era"] = body.era
+        if mode == "era_shift":
+            if body.era:
+                asset["era"] = body.era
+            asset["source_asset_id"] = subject["id"]
+            existing = db.find_asset_by_source(world_id, subject["id"], asset["era"])
+            if existing:
+                saved = db.update_asset(existing["id"], asset)
+            else:
+                saved = db.create_asset(world_id, asset)
+            return {"asset": saved, "grounding": grounding}
+
+        if mode == "character":
+            # Best-effort dedup: if the model produced a name that collides
+            # with an existing character, retry once with explicit exclusions.
+            existing_names = [
+                a["title"] for a in assets
+                if a.get("type") == "character"
+                and a["title"].lower() == asset["title"].lower()
+            ]
+            if existing_names:
+                try:
+                    exclusion_list = ", ".join(f'"{n}"' for n in existing_names)
+                    retry_user_prompt = (
+                        "Create one new character who belongs organically in this world — "
+                        "tied to an existing place, faction, or event. "
+                        f"Do not use any of these existing names: {exclusion_list}."
+                    )
+                    retry_text = await wx.generate(system_prompt, retry_user_prompt)
+                    retry_raw = wx.parse_json(retry_text)
+                    retry_asset = gen.normalize_asset(retry_raw, world, force_type)
+                    retry_asset = await _auto_tag(retry_asset, world, assets)
+                    # Only accept the retry if it doesn't collide either
+                    retry_collides = any(
+                        a["title"].lower() == retry_asset["title"].lower()
+                        for a in assets if a.get("type") == "character"
+                    )
+                    if not retry_collides:
+                        asset = retry_asset
+                except Exception:
+                    pass  # best-effort — fall through and save the original
 
         saved = db.create_asset(world_id, asset)
         return {"asset": saved, "grounding": grounding}
@@ -255,7 +368,15 @@ async def generate_asset(world_id: str, body: GenerateRequest):
                 force_type,
             )
         )
-        fallback_saved = db.create_asset(world_id, fallback)
+        if mode == "era_shift":
+            fallback["source_asset_id"] = subject["id"]
+            existing = db.find_asset_by_source(world_id, subject["id"], fallback["era"])
+            if existing:
+                fallback_saved = db.update_asset(existing["id"], fallback)
+            else:
+                fallback_saved = db.create_asset(world_id, fallback)
+        else:
+            fallback_saved = db.create_asset(world_id, fallback)
         return {
             "asset": fallback_saved,
             "grounding": grounding,

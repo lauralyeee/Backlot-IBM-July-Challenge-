@@ -83,6 +83,27 @@ def custom_persona_prompt(description: str) -> tuple[str, str]:
 
 
 
+def normalize_seed_entry(raw: dict, eras: list[str]) -> dict:
+    """Like normalize_asset(), but for custom-persona seed entries generated
+    before a world (and its eras) formally exist yet — takes the eras list
+    directly instead of a world dict, and omits id/createdAt since the
+    frontend assigns those when the world is actually created."""
+    def first(v, d):
+        return v.strip() if isinstance(v, str) and v.strip() else d
+
+    return {
+        "title": first(raw.get("title"), "Untitled entry"),
+        "type": raw.get("type") if raw.get("type") in TYPES else "lore",
+        "era": raw.get("era") if raw.get("era") in eras else (eras[0] if eras else ""),
+        "faction": first(raw.get("faction"), "\u2014"),
+        "mood": first(raw.get("mood"), "neutral"),
+        "content": first(
+            raw.get("content"),
+            "A detail worth expanding once you're inside the world.",
+        ),
+    }
+
+
 # ── Offline fallbacks (mirror of generation.js) ───────────────────────────
 
 def _pick(arr, seed):

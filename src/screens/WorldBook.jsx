@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { TYPES, TYPE_META } from "../lib/worldData";
-import { auditWorld } from "../lib/api";
+import { auditWorld, deleteAsset } from "../lib/api";
 import { offlineAudit } from "../lib/generation";
 import { Chip, Field, Btn, Busy, EmptyState, Banner } from "../components/ui";
-import { IconSearch, IconCheck, IconAlert } from "../components/Icons";
+import { IconSearch, IconCheck, IconAlert, IconTrash } from "../components/Icons";
 import AssetCard from "../components/AssetCard";
 
-export default function WorldBook({ world, assets, setTab }) {
+export default function WorldBook({ world, assets, setTab, removeAsset }) {
   const [q, setQ] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [busy, setBusy] = useState(false);
@@ -85,7 +85,23 @@ export default function WorldBook({ world, assets, setTab }) {
         />
       ) : (
         <div className="grid-cards">
-          {filtered.map((a) => <AssetCard key={a.id} asset={a} />)}
+          {filtered.map((a) => (
+            <div key={a.id} style={{ position: "relative" }}>
+              <AssetCard asset={a} />
+              <button
+                className="icon-btn"
+                title={`Delete "${a.title}"`}
+                style={{ position: "absolute", top: 8, right: 8, opacity: 0.6 }}
+                onClick={async () => {
+                  if (!window.confirm(`Delete "${a.title}"? This can't be undone.`)) return;
+                  await deleteAsset(world.id, a.id);
+                  removeAsset(a.id);
+                }}
+              >
+                <IconTrash width={15} height={15} />
+              </button>
+            </div>
+          ))}
         </div>
       )}
     </div>
