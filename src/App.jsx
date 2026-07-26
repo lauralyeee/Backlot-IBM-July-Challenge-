@@ -10,6 +10,8 @@ import Create from "./screens/Create";
 import Characters from "./screens/Characters";
 import Timeline from "./screens/Timeline";
 import Settings from "./screens/Settings";
+import Import from "./screens/Import";
+import Export from "./screens/Export";
 
 const TITLES = {
   home: ["Home", "Where to start"],
@@ -18,6 +20,8 @@ const TITLES = {
   characters: ["Characters", "NPC Cast Generator & chat"],
   timeline: ["Timeline", "Time-Shift Mode"],
   settings: ["Settings", "Your world, your rules"],
+  import: ["Import", "Bring in world data"],
+  export: ["Export", "Take your world data out"],
 };
 
 // Persist world-id + ui mode in localStorage (non-sensitive, no credentials)
@@ -163,6 +167,8 @@ export default function App() {
           {tab === "create" && <Create world={worldFull} assets={assets} addAsset={addAsset} />}
           {tab === "characters" && <Characters world={worldFull} assets={assets} addAsset={addAsset} />}
           {tab === "timeline" && <Timeline world={worldFull} assets={assets} addAsset={addAsset} />}
+          {tab === "import" && <Import />}
+          {tab === "export" && <Export />}
           {tab === "settings" && (
             <Settings
               world={world}
