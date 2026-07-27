@@ -100,6 +100,23 @@ export default function App() {
     }
   }, []);
 
+  // Called by Settings after an era rename/remove, which already persisted
+  // via its own dedicated endpoint (not patchWorld) — this just syncs the
+  // authoritative world object the endpoint returned into local state,
+  // without issuing a second, redundant PATCH.
+  const applyWorldUpdate = useCallback((updated) => {
+    setWorld({ ...updated, rolesFull: ROLES.filter((r) => updated.roles.includes(r.id)) });
+  }, []);
+
+  // Called by Settings after an era rename/remove that reassigned assets —
+  // those assets' era field changed server-side, so the locally-held assets
+  // list needs a refetch to stay in sync.
+  const refreshAssets = useCallback(async () => {
+    if (!worldId) return;
+    const a = await listAssets(worldId);
+    setAssets(a);
+  }, [worldId]);
+
   const handleReset = useCallback(() => {
     setWorldId(null);
     setWorld(null);
@@ -163,16 +180,18 @@ export default function App() {
         <TopBar title={title} subtitle={subtitle} mode={mode} toggleTheme={toggleTheme} />
         <div className="content">
           {tab === "home" && <Home world={worldFull} assets={assets} setTab={setTab} />}
-          {tab === "canon" && <WorldBook world={worldFull} assets={assets} setTab={setTab} removeAsset={removeAsset} />}
+          {tab === "canon" && <WorldBook world={worldFull} assets={assets} setTab={setTab} removeAsset={removeAsset} addAsset={addAsset} />}
           {tab === "create" && <Create world={worldFull} assets={assets} addAsset={addAsset} />}
           {tab === "characters" && <Characters world={worldFull} assets={assets} addAsset={addAsset} />}
           {tab === "timeline" && <Timeline world={worldFull} assets={assets} addAsset={addAsset} />}
           {tab === "import" && <Import world={worldFull} addAsset={addAsset} />}
-          {tab === "export" && <Export />}
+          {tab === "export" && <Export world={worldFull} assets={assets} />}
           {tab === "settings" && (
             <Settings
               world={world}
               setWorld={handleSetWorld}
+              onWorldUpdated={applyWorldUpdate}
+              refreshAssets={refreshAssets}
               mode={mode}
               toggleTheme={toggleTheme}
               onReset={handleReset}

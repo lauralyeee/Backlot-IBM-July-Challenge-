@@ -72,6 +72,22 @@ def init_db():
             conn.execute("ALTER TABLE assets ADD COLUMN status TEXT NOT NULL DEFAULT 'confirmed'")
         if "source_document_id" not in existing_cols:
             conn.execute("ALTER TABLE assets ADD COLUMN source_document_id TEXT DEFAULT NULL")
+        # Migration: portrait_prompt + portrait_seed (NPC portrait feature).
+        # The image itself is never stored -- Pollinations.ai URLs are
+        # deterministic (same prompt+seed = same face), so persisting these
+        # two fields is enough to rebuild the portrait and all of its
+        # expression variants anywhere, forever.
+        if "portrait_prompt" not in existing_cols:
+            conn.execute("ALTER TABLE assets ADD COLUMN portrait_prompt TEXT DEFAULT NULL")
+        if "portrait_seed" not in existing_cols:
+            conn.execute("ALTER TABLE assets ADD COLUMN portrait_seed INTEGER DEFAULT NULL")
+        # Migration: era_notes on worlds -- JSON object mapping era name ->
+        # 1-2 sentence description. Gives the model actual context for what
+        # each era IS (era names alone made it guess, e.g. inventing aging
+        # between eras whose chronology it couldn't know).
+        world_cols = {row[1] for row in conn.execute("PRAGMA table_info(worlds)").fetchall()}
+        if "era_notes" not in world_cols:
+            conn.execute("ALTER TABLE worlds ADD COLUMN era_notes TEXT NOT NULL DEFAULT '{}'")
 
 
 # ── Worlds ──────────────────────────────────────────────────────────────────
@@ -83,14 +99,15 @@ def create_world(data: dict) -> dict:
     """Insert a world row and return the full row dict."""
     with _connect() as conn:
         conn.execute(
-            """INSERT INTO worlds (id, name, persona_id, persona_label, eras, ideas, dialects, roles, created_at)
-               VALUES (:id, :name, :persona_id, :persona_label, :eras, :ideas, :dialects, :roles, :created_at)""",
+            """INSERT INTO worlds (id, name, persona_id, persona_label, eras, era_notes, ideas, dialects, roles, created_at)
+               VALUES (:id, :name, :persona_id, :persona_label, :eras, :era_notes, :ideas, :dialects, :roles, :created_at)""",
             {
                 "id": data["id"],
                 "name": data["name"],
                 "persona_id": data["personaId"],
                 "persona_label": data["personaLabel"],
                 "eras": json.dumps(data["eras"]),
+                "era_notes": json.dumps(data.get("eraNotes", {})),
                 "ideas": json.dumps(data["ideas"]),
                 "dialects": json.dumps(data.get("dialects", {})),
                 "roles": json.dumps(data["roles"]),
@@ -114,11 +131,12 @@ def update_world(world_id: str, data: dict) -> dict | None:
         "personaId": "persona_id",
         "personaLabel": "persona_label",
         "eras": "eras",
+        "eraNotes": "era_notes",
         "ideas": "ideas",
         "dialects": "dialects",
         "roles": "roles",
     }
-    json_fields = {"eras", "ideas", "dialects", "roles"}
+    json_fields = {"eras", "eraNotes", "ideas", "dialects", "roles"}
     for key, col in mapping.items():
         if key in data:
             fields.append(f"{col} = :{col}")
@@ -138,6 +156,7 @@ def _row_to_world(row) -> dict:
         "personaId": row["persona_id"],
         "personaLabel": row["persona_label"],
         "eras": json.loads(row["eras"]),
+        "eraNotes": json.loads(row["era_notes"] or "{}"),
         "ideas": json.loads(row["ideas"]),
         "dialects": json.loads(row["dialects"]),
         "roles": json.loads(row["roles"]),
@@ -219,6 +238,8 @@ def update_asset(asset_id: int, data: dict) -> dict:
         "offline": "offline",
         "status": "status",
         "source_document_id": "source_document_id",
+        "portrait_prompt": "portrait_prompt",
+        "portrait_seed": "portrait_seed",
     }
     for key, col in mapping.items():
         if key in data:
@@ -233,6 +254,28 @@ def update_asset(asset_id: int, data: dict) -> dict:
     with _connect() as conn:
         conn.execute(f"UPDATE assets SET {', '.join(fields)} WHERE id = :id", params)
     return get_asset(asset_id)
+
+
+def rename_asset_era(world_id: str, old_era: str, new_era: str) -> int:
+    """Cascade an era rename to every asset in a world tagged with old_era.
+    Returns the number of assets updated. Used by both the dedicated rename
+    endpoint and the remove-with-merge path, so renaming or removing an era
+    never silently orphans existing canon entries."""
+    with _connect() as conn:
+        cur = conn.execute(
+            "UPDATE assets SET era = ? WHERE world_id = ? AND era = ?",
+            (new_era, world_id, old_era),
+        )
+    return cur.rowcount
+
+
+def count_assets_by_era(world_id: str, era: str) -> int:
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) AS c FROM assets WHERE world_id = ? AND era = ?",
+            (world_id, era),
+        ).fetchone()
+    return row["c"] if row else 0
 
 
 def delete_asset(asset_id: int) -> bool:
@@ -262,6 +305,9 @@ def _row_to_asset(row) -> dict:
     src_doc = row["source_document_id"]
     if src_doc is not None:
         result["sourceDocumentId"] = src_doc
+    if row["portrait_prompt"]:
+        result["portraitPrompt"] = row["portrait_prompt"]
+        result["portraitSeed"] = row["portrait_seed"]
     return result
 
 

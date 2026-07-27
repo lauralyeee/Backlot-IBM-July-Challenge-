@@ -49,6 +49,7 @@ export default function Timeline({ world, assets, addAsset }) {
             <button
               key={e}
               onClick={() => setEra(e)}
+              title={(world.eraNotes || {})[e] || ""}
               style={{
                 flex: 1, padding: "14px 10px", borderRadius: "var(--radius-sm)", cursor: "pointer", textAlign: "center",
                 border: `2px solid ${era === e ? "var(--accent)" : "var(--border)"}`,
@@ -61,6 +62,17 @@ export default function Timeline({ world, assets, addAsset }) {
             </button>
           ))}
         </div>
+
+        {((world.eraNotes || {})[era] || "").trim() ? (
+          <p style={{ fontSize: 12.5, color: "var(--text-dim)", margin: "6px 0 0", lineHeight: 1.55 }}>
+            {world.eraNotes[era]}
+          </p>
+        ) : (
+          <p style={{ fontSize: 12.5, color: "var(--text-faint)", margin: "6px 0 0", lineHeight: 1.55 }}>
+            "{era}" has no description yet — add one in Settings → Timeline / eras (or ✨ Auto-describe)
+            so shifts and portraits know what this era actually means.
+          </p>
+        )}
 
         <Btn variant="primary" onClick={shift} disabled={busy || !subject} style={{ marginTop: 12 }}>
           {busy ? "Traveling…" : `Show it in ${era}`}

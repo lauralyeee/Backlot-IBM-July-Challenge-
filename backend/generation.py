@@ -36,6 +36,25 @@ def schema_for(world: dict) -> str:
     )
 
 
+def timeline_block(world: dict) -> str:
+    """Render the world's eras -- in their canonical chronological order --
+    with their descriptions, as a prompt block. This is what lets the model
+    actually understand what each era IS instead of guessing from its name
+    (the guessing produced wrong assumptions like characters aging between
+    eras whose time relationship the model couldn't know)."""
+    eras = world.get("eras", [])
+    notes = world.get("eraNotes") or {}
+    lines = []
+    for i, e in enumerate(eras):
+        note = (notes.get(e) or "").strip()
+        lines.append(f"{i + 1}. {e}" + (f" — {note}" if note else ""))
+    return (
+        "WORLD TIMELINE (eras in chronological order; assume NOTHING about "
+        "time spans, aging, decay, or technological change between eras "
+        "beyond what these descriptions state):\n" + "\n".join(lines)
+    )
+
+
 def normalize_asset(raw: dict, world: dict, fallback_type: str | None = None) -> dict:
     def first(v, d):
         return v.strip() if isinstance(v, str) and v.strip() else d
@@ -56,20 +75,35 @@ def normalize_asset(raw: dict, world: dict, fallback_type: str | None = None) ->
 
 # ── Custom persona prompt builder ─────────────────────────────────────────────
 
-def custom_persona_prompt(description: str) -> tuple[str, str]:
-    """Return (system_prompt, user_prompt) for generating a persona from a free-text description."""
+def custom_persona_prompt(description: str, custom_eras: list[str] | None = None) -> tuple[str, str]:
+    """Return (system_prompt, user_prompt) for generating a persona from a free-text
+    description. If custom_eras is given (the writer typed their own timeline at
+    onboarding), the model is told to use exactly those eras rather than inventing
+    its own -- the writer's own timeline always wins over whatever the model would
+    have picked."""
     system_prompt = (
         "You are a worldbuilding assistant. Given a brief description of a world concept, "
         "produce a structured persona object for a story world. "
         "Output must be a single JSON object and nothing else — no explanation, no markdown. "
         "Begin your response with { and end with }."
     )
+    if custom_eras:
+        eras_list = ", ".join(f'"{e}"' for e in custom_eras)
+        eras_instruction = (
+            f'  "eras": use exactly this era list, in this exact order, unchanged: [{eras_list}],\n'
+        )
+    else:
+        eras_instruction = (
+            '  "eras": an array of 3 to 6 era names as strings (evocative, short) — choose '
+            "however many distinct chronological turning points this specific world concept "
+            "naturally calls for, do not pad to a fixed count,\n"
+        )
     user_prompt = (
         "Create a persona for this world concept:\n"
         f"{description}\n\n"
         "Return a JSON object with exactly these keys:\n"
         "  \"personaLabel\": a short evocative label for the world archetype (string, 2-5 words),\n"
-        "  \"eras\": an array of exactly 3 era names as strings (evocative, short),\n"
+        f"{eras_instruction}"
         "  \"nameIdeas\": an array of exactly 4 evocative world name suggestions as strings,\n"
         "  \"seed\": an array of 2-3 starter canon entries, each an object with keys: "
         "\"title\" (short name), \"type\" (one of: lore|character|location|faction|event), "

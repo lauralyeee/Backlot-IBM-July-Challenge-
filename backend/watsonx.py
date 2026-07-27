@@ -29,8 +29,16 @@ IAM_URL = "https://iam.cloud.ibm.com/identity/token"
 WX_BASE = "https://eu-de.ml.cloud.ibm.com"
 
 # Keep in sync with src/lib/watsonx.js MODEL_CHAIN.
-# If IBM deprecates a model, use /api/models to find the current ID.
-MODEL_CHAIN = ["ibm/granite-4-h-small", "ibm/granite-3-3-8b-instruct"]
+# Primary is IBM Granite (this project's core LLM). The fallback used to be
+# "ibm/granite-3-3-8b-instruct", but a live GET /api/models check on
+# 2026-07-26 showed it is NOT reachable on this watsonx.ai project/region
+# (eu-de) -- it silently failed on every retry. Replaced with
+# "mistralai/mistral-medium-2505": confirmed live on this account, and the
+# strongest available fallback by intelligence/latency/cost among the
+# account's other reachable models (Llama 3.3 70B Instruct, Llama 4
+# Maverick, Mistral Small 3.1). If IBM deprecates a model or account access
+# changes, use /api/models to find current live IDs.
+MODEL_CHAIN = ["ibm/granite-4-h-small", "mistralai/mistral-medium-2505"]
 
 _token_cache: dict = {"token": None, "expires_at": 0.0}
 

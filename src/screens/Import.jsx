@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { ingestText, commitIngested } from "../lib/api";
+import { ingestText, commitIngested, updateIngestedAsset } from "../lib/api";
 import { TYPE_META } from "../lib/worldData";
 import { Field, Btn, Chip, Busy, Banner, Tag, EmptyState } from "../components/ui";
 import { IconSpark } from "../components/Icons";
@@ -106,6 +106,7 @@ export default function Import({ world, addAsset }) {
   const [addedCount, setAddedCount] = useState(0);
   const [filter, setFilter] = useState("all");
   const [pendingIds, setPendingIds] = useState([]);
+  const [pendingMatchIds, setPendingMatchIds] = useState([]);
 
   const counts = useMemo(() => ({
     total: proposed.length,
@@ -153,6 +154,20 @@ export default function Import({ world, addAsset }) {
 
   function reject(item) {
     setProposed((prev) => prev.filter((p) => p.id !== item.id));
+  }
+
+  async function updateExisting(match) {
+    setPendingMatchIds((prev) => [...prev, match.existing.id]);
+    setError("");
+    try {
+      const res = await updateIngestedAsset(world.id, match.existing.id, staged.document, match.extracted);
+      addAsset(res.updated);
+      setStaged((prev) => ({ ...prev, matches: prev.matches.filter((m) => m.existing.id !== match.existing.id) }));
+      setNotice(`"${res.updated.title}" updated from this document.`);
+    } catch (e) {
+      setError(`Couldn't update: ${e.message}`);
+    }
+    setPendingMatchIds((prev) => prev.filter((id) => id !== match.existing.id));
   }
 
   return (
@@ -285,9 +300,12 @@ export default function Import({ world, addAsset }) {
           <div className="card">
             <div className="section-label">Already in your World Book ({staged.matches.length})</div>
             <p style={{ fontSize: 13, color: "var(--text-faint)", marginBottom: 12, lineHeight: 1.6 }}>
-              These names already exist, so they were left alone. Compare the two versions and edit
-              the entry yourself if the document adds something worth keeping.
+              These names already exist. Compare the two versions below — click "Update existing
+              entry" to replace it with this document's version, or leave it alone and edit it
+              yourself later from the World Book.
             </p>
+            {error && <Banner tone="danger">{error}</Banner>}
+            {notice && !error && <Banner tone="ok">{notice}</Banner>}
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {staged.matches.map((m, i) => (
                 <div key={i} style={{ border: "1px solid var(--border-soft)", borderRadius: "var(--radius)", padding: 14 }}>
@@ -301,6 +319,11 @@ export default function Import({ world, addAsset }) {
                       <div style={{ fontSize: 11.5, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>In this document</div>
                       <div style={{ fontSize: 13, lineHeight: 1.6, color: "var(--text-dim)" }}>{m.extracted.content}</div>
                     </div>
+                  </div>
+                  <div style={{ marginTop: 10 }}>
+                    <Btn small disabled={pendingMatchIds.includes(m.existing.id)} onClick={() => updateExisting(m)}>
+                      Update existing entry
+                    </Btn>
                   </div>
                 </div>
               ))}
