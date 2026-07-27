@@ -1,17 +1,53 @@
 import { useState } from "react";
 import { TYPES, TYPE_META } from "../lib/worldData";
-import { auditWorld, deleteAsset } from "../lib/api";
+import { auditWorld, deleteAsset, updateAsset } from "../lib/api";
 import { offlineAudit } from "../lib/generation";
 import { Chip, Field, Btn, Busy, EmptyState, Banner } from "../components/ui";
-import { IconSearch, IconCheck, IconAlert, IconTrash } from "../components/Icons";
+import { IconSearch, IconCheck, IconAlert, IconTrash, IconEdit } from "../components/Icons";
 import AssetCard from "../components/AssetCard";
 
-export default function WorldBook({ world, assets, setTab, removeAsset }) {
+export default function WorldBook({ world, assets, setTab, removeAsset, addAsset }) {
   const [q, setQ] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [busy, setBusy] = useState(false);
   const [report, setReport] = useState(null);
   const [error, setError] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState("");
+
+  function startEdit(a) {
+    setEditingId(a.id);
+    setEditForm({ title: a.title, content: a.content, era: a.era, faction: a.faction, mood: a.mood });
+    setEditError("");
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditForm({});
+    setEditError("");
+  }
+
+  async function saveEdit(a) {
+    setEditSaving(true);
+    setEditError("");
+    try {
+      const res = await updateAsset(world.id, a.id, {
+        title: editForm.title,
+        content: editForm.content,
+        era: editForm.era,
+        faction: editForm.faction,
+        mood: editForm.mood,
+      });
+      addAsset(res);
+      setEditingId(null);
+      setEditForm({});
+    } catch (e) {
+      setEditError(`Couldn't save: ${e.message}`);
+    }
+    setEditSaving(false);
+  }
 
   const filtered = assets.filter((a) => {
     const okQ = !q || (a.title + a.content + a.era + a.faction + a.type).toLowerCase().includes(q.toLowerCase());
@@ -87,19 +123,80 @@ export default function WorldBook({ world, assets, setTab, removeAsset }) {
         <div className="grid-cards">
           {filtered.map((a) => (
             <div key={a.id} style={{ position: "relative" }}>
-              <AssetCard asset={a} />
-              <button
-                className="icon-btn"
-                title={`Delete "${a.title}"`}
-                style={{ position: "absolute", top: 8, right: 8, opacity: 0.6 }}
-                onClick={async () => {
-                  if (!window.confirm(`Delete "${a.title}"? This can't be undone.`)) return;
-                  await deleteAsset(world.id, a.id);
-                  removeAsset(a.id);
-                }}
-              >
-                <IconTrash width={15} height={15} />
-              </button>
+              {editingId === a.id ? (
+                <div className="card" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 15, marginBottom: 2 }}>
+                    Editing — {a.type}
+                  </div>
+                  <Field
+                    value={editForm.title}
+                    onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))}
+                    placeholder="Title"
+                  />
+                  <Field
+                    area
+                    rows={5}
+                    value={editForm.content}
+                    onChange={(e) => setEditForm((f) => ({ ...f, content: e.target.value }))}
+                    placeholder="Description"
+                  />
+                  <select
+                    className="field"
+                    value={editForm.era}
+                    onChange={(e) => setEditForm((f) => ({ ...f, era: e.target.value }))}
+                  >
+                    {world.eras.map((era) => (
+                      <option key={era} value={era}>{era}</option>
+                    ))}
+                  </select>
+                  <Field
+                    value={editForm.faction}
+                    onChange={(e) => setEditForm((f) => ({ ...f, faction: e.target.value }))}
+                    placeholder="Faction (or —)"
+                  />
+                  <Field
+                    value={editForm.mood}
+                    onChange={(e) => setEditForm((f) => ({ ...f, mood: e.target.value }))}
+                    placeholder="Mood"
+                  />
+                  {editError && <Banner tone="danger">{editError}</Banner>}
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <Btn
+                      small
+                      variant="primary"
+                      disabled={editSaving || !editForm.title?.trim() || !editForm.content?.trim()}
+                      onClick={() => saveEdit(a)}
+                    >
+                      Save
+                    </Btn>
+                    <Btn small disabled={editSaving} onClick={cancelEdit}>Cancel</Btn>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <AssetCard asset={a} />
+                  <button
+                    className="icon-btn"
+                    title={`Edit "${a.title}"`}
+                    style={{ position: "absolute", top: 8, right: 34, opacity: 0.6 }}
+                    onClick={() => startEdit(a)}
+                  >
+                    <IconEdit width={15} height={15} />
+                  </button>
+                  <button
+                    className="icon-btn"
+                    title={`Delete "${a.title}"`}
+                    style={{ position: "absolute", top: 8, right: 8, opacity: 0.6 }}
+                    onClick={async () => {
+                      if (!window.confirm(`Delete "${a.title}"? This can't be undone.`)) return;
+                      await deleteAsset(world.id, a.id);
+                      removeAsset(a.id);
+                    }}
+                  >
+                    <IconTrash width={15} height={15} />
+                  </button>
+                </>
+              )}
             </div>
           ))}
         </div>

@@ -21,6 +21,7 @@ export default function Onboarding({ onDone, mode, toggleTheme }) {
   // custom-world state
   const [showCustom, setShowCustom] = useState(false);
   const [customDesc, setCustomDesc] = useState("");
+  const [customErasText, setCustomErasText] = useState("");
   const [customGenerating, setCustomGenerating] = useState(false);
   const [customOffline, setCustomOffline] = useState(false);
 
@@ -32,19 +33,34 @@ export default function Onboarding({ onDone, mode, toggleTheme }) {
     setStep(2);
   };
 
+  // Parses the free-form "Founding, The Long Winter, Present Day" input into
+  // a clean array. Returns null (not an empty array) if the writer didn't
+  // type at least 2 usable era names, so callers can tell "no custom eras
+  // given" apart from "gave an empty string."
+  const parseCustomEras = () => {
+    const parsed = customErasText
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    return parsed.length >= 2 ? parsed : null;
+  };
+
   const handleCustomGenerate = async () => {
     if (customGenerating || customDesc.trim().length < 10) return;
     setCustomGenerating(true);
     setCustomOffline(false);
+    const customEras = parseCustomEras();
     try {
-      const data = await generateCustomPersona(customDesc.trim());
+      const data = await generateCustomPersona(customDesc.trim(), customEras);
       const built = {
         id: "custom",
         label: data.personaLabel || "Custom world",
         desc: customDesc.trim(),
-        eras: Array.isArray(data.eras) && data.eras.length === 3
+        // The backend already forces data.eras to equal customEras when it
+        // was given, so trusting data.eras here covers both paths.
+        eras: Array.isArray(data.eras) && data.eras.length >= 2
           ? data.eras
-          : ["Act One", "Act Two", "Act Three"],
+          : (customEras || ["Act One", "Act Two", "Act Three"]),
         nameIdeas: Array.isArray(data.nameIdeas) ? data.nameIdeas : [],
         dialects: {},
         ideas: [],
@@ -53,13 +69,15 @@ export default function Onboarding({ onDone, mode, toggleTheme }) {
       setPersona(built);
       setStep(2);
     } catch (_err) {
-      // Offline fallback — let user continue with generic structure
+      // Offline fallback — honor a writer-typed timeline even when the
+      // service is unreachable; only fall back to the generic 3-act
+      // placeholder if they didn't specify their own eras.
       setCustomOffline(true);
       const built = {
         id: "custom",
         label: "Custom world",
         desc: customDesc.trim(),
-        eras: ["Act One", "Act Two", "Act Three"],
+        eras: customEras || ["Act One", "Act Two", "Act Three"],
         nameIdeas: [],
         dialects: {},
         ideas: [],
@@ -202,6 +220,11 @@ export default function Onboarding({ onDone, mode, toggleTheme }) {
                         color: "var(--text)", fontSize: 14, lineHeight: 1.6,
                         resize: "vertical", fontFamily: "inherit",
                       }}
+                    />
+                    <Field
+                      value={customErasText}
+                      onChange={(e) => setCustomErasText(e.target.value)}
+                      placeholder="Optional: your own era names, comma-separated (e.g. Founding, The Long Winter, Present Day) — leave blank for AI to suggest 3–6"
                     />
                     <Btn
                       variant="primary"

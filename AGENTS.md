@@ -8,9 +8,9 @@ This file provides guidance to agents when working with code in this repository.
 
 These constraints must not be revisited without an explicit trade-off discussion:
 
-- **LLM provider**: IBM Granite via watsonx.ai only. `MODEL_CHAIN` is in `backend/watsonx.py`. If you see "model not found", call `GET /api/models` to discover live IDs and update `MODEL_CHAIN` there **and** mirror the comment in `src/lib/watsonx.js`.
+- **LLM provider**: IBM Granite via watsonx.ai is the primary/showcased model. **Updated 2026-07-26**: Laura deliberately lifted the "Granite only" restriction after a live `GET /api/models` check showed the configured fallback (`ibm/granite-3-3-8b-instruct`) isn't reachable on this account/region -- it was replaced with a genuinely-live cross-provider fallback for real redundancy. `MODEL_CHAIN` is in `backend/watsonx.py`. If you see "model not found", call `GET /api/models` to discover live IDs and update `MODEL_CHAIN` there **and** mirror the comment in `src/lib/watsonx.js`.
   ```python
-  MODEL_CHAIN = ["ibm/granite-4-h-small", "ibm/granite-3-3-8b-instruct"]
+  MODEL_CHAIN = ["ibm/granite-4-h-small", "mistralai/mistral-medium-2505"]
   ```
 - **Credentials**: `WATSONX_API_KEY` / `WATSONX_PROJECT_ID` live exclusively in `backend/.env`. Never prefix with `VITE_`, never import in `src/`.
 - **Retrieval**: Custom term-overlap scorer in `backend/retrieval.py`. Do NOT add LangChain, LangFlow, or any vector-store. New implementations must keep the `retrieve_relevant()` signature.

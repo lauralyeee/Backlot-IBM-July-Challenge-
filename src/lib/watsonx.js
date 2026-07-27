@@ -4,13 +4,14 @@
    ============================================================ */
 
 const WX_PROJECT_ID = import.meta.env.VITE_WATSONX_PROJECT_ID;
-// "ibm/granite-3-8b-instruct" has been deprecated/removed from watsonx.ai's
-// catalog (IBM periodically retires older Granite model IDs), which is why
-// the app was surfacing "model not found" errors. granite-3-3-8b-instruct
-// is the current supported small Granite instruct model as of this writing.
-// If IBM retires another model in this list, use listAvailableModels()
-// below (surfaced in Settings > Test connection) to find the current ID.
-const MODEL_CHAIN = ["ibm/granite-4-h-small", "ibm/granite-3-3-8b-instruct"];
+// "ibm/granite-3-8b-instruct" was deprecated/removed from watsonx.ai's
+// catalog, and its replacement "ibm/granite-3-3-8b-instruct" turned out to
+// ALSO be unreachable on this project's account (confirmed via a live
+// GET /api/models check on 2026-07-26 -- it simply wasn't in the response).
+// Replaced with "mistralai/mistral-medium-2505", a deliberate cross-provider
+// fallback confirmed live on this account. See backend/watsonx.py for the
+// authoritative version of this decision.
+const MODEL_CHAIN = ["ibm/granite-4-h-small", "mistralai/mistral-medium-2505"];
 // NOTE (2026-07-26): this file is legacy/unused (see AGENTS.md) — the live
 // backend (backend/watsonx.py) switched from /ml/v1/text/generation to
 // /ml/v1/text/chat to fix leaked instruction text / runaway replies in
