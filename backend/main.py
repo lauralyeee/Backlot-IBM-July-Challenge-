@@ -16,6 +16,7 @@ Endpoints:
   POST /api/worlds/{id}/ingest                      script/doc → extracted proposals (read-only, Feature 1)
   POST /api/worlds/{id}/ingest/commit               persist writer-approved extracted entries
   POST /api/worlds/{id}/ingest/update/{asset_id}    overwrite an existing asset from a matched extraction
+  POST /api/worlds/{id}/ingest/file                 Docling: PDF/DOCX upload -> extracted proposals (same shape as /ingest)
   POST /api/worlds/{id}/export         compile assets → Markdown document (read-only, Feature 2)
   POST /api/worlds/{id}/eras/rename    rename an era, cascading to every asset tagged with it
   POST /api/worlds/{id}/eras/remove    remove an era (optionally merging its assets into another)
@@ -33,7 +34,7 @@ import time
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -514,14 +515,11 @@ def delete_asset(world_id: str, asset_id: int):
 # it via /ingest/commit below. This keeps the AI from silently editing the
 # writer's canon, and means re-running an extraction has no side effects.
 
-@app.post("/api/worlds/{world_id}/ingest")
-async def ingest_document(world_id: str, body: IngestRequest):
-    world = _require_world(world_id)
-
-    text = body.text.strip()
-    if not text:
-        raise HTTPException(400, "text is required")
-
+async def _stage_extraction(world_id: str, world: dict, text: str, title: str) -> dict:
+    """Shared by /ingest (pasted text) and /ingest/file (Docling-converted
+    text): runs extraction, normalizes it, and diffs against existing World
+    Book assets. Read-only — nothing is written until /ingest/commit.
+    """
     offline = False
     try:
         raw_text = await wx.generate(
@@ -541,7 +539,7 @@ async def ingest_document(world_id: str, body: IngestRequest):
     document = {
         "id": f"doc-{int(time.time() * 1000)}-{random.randint(0, 999)}",
         "worldId": world_id,
-        "title": (body.title or "Untitled document").strip() or "Untitled document",
+        "title": (title or "Untitled document").strip() or "Untitled document",
         "rawText": text,
         "createdAt": int(time.time() * 1000),
     }
@@ -572,6 +570,46 @@ async def ingest_document(world_id: str, body: IngestRequest):
     if offline:
         result["offline"] = True
     return result
+
+
+@app.post("/api/worlds/{world_id}/ingest")
+async def ingest_document(world_id: str, body: IngestRequest):
+    world = _require_world(world_id)
+
+    text = body.text.strip()
+    if not text:
+        raise HTTPException(400, "text is required")
+
+    return await _stage_extraction(world_id, world, text, body.title)
+
+
+@app.post("/api/worlds/{world_id}/ingest/file")
+async def ingest_file(world_id: str, file: UploadFile = File(...), title: str = Form("")):
+    """Docling companion to /ingest: same read-only staging as the paste
+    path, but the source text comes from an uploaded PDF/DOCX. IBM Docling
+    parses the document here; IBM Granite (inside _stage_extraction) extracts
+    the structured canon — two named IBM technologies in one pipeline.
+    """
+    world = _require_world(world_id)
+
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in ing.SUPPORTED_UPLOAD_EXTENSIONS:
+        raise HTTPException(400, f"Unsupported file type '{ext or 'unknown'}' — upload a PDF or DOCX.")
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "Uploaded file is empty")
+
+    try:
+        text = ing.convert_upload_to_text(file.filename, data)
+    except RuntimeError as e:
+        raise HTTPException(422, str(e))
+
+    text = text.strip()
+    if not text:
+        raise HTTPException(422, "Docling couldn't find any text in this file")
+
+    return await _stage_extraction(world_id, world, text, title or file.filename)
 
 
 @app.post("/api/worlds/{world_id}/ingest/commit", status_code=201)

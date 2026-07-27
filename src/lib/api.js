@@ -75,6 +75,28 @@ export const ingestText = (worldId, doc) =>
   req("POST", `/worlds/${worldId}/ingest`, { text: doc.text, title: doc.title || "Untitled document" });
 
 /**
+ * Docling companion to ingestText: same read-only staging, but the source
+ * text comes from an uploaded PDF/DOCX file instead of pasted text. Uses
+ * FormData directly (not the shared req() helper, which always JSON-encodes)
+ * so the browser sets the correct multipart boundary itself.
+ * @param {string} worldId
+ * @param {File} file
+ * @param {string} [title]
+ * @returns {{ document, proposed, matches, timelineMarkers, relationships, offline? }}
+ */
+export async function ingestFile(worldId, file, title) {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (title) formData.append("title", title);
+  const res = await fetch(`${BASE}/worlds/${worldId}/ingest/file`, { method: "POST", body: formData });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`API POST /worlds/${worldId}/ingest/file → ${res.status}: ${text}`);
+  }
+  return res.json();
+}
+
+/**
  * @param {string} worldId
  * @param {object} document  the staged document object returned by ingestText
  * @param {Array}  assets    one or more approved entries to persist

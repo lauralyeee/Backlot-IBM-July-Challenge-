@@ -1,8 +1,8 @@
-import { useState, useMemo } from "react";
-import { ingestText, commitIngested, updateIngestedAsset } from "../lib/api";
+import { useState, useMemo, useRef } from "react";
+import { ingestText, ingestFile, commitIngested, updateIngestedAsset } from "../lib/api";
 import { TYPE_META } from "../lib/worldData";
 import { Field, Btn, Chip, Busy, Banner, Tag, EmptyState } from "../components/ui";
-import { IconSpark } from "../components/Icons";
+import { IconSpark, IconImport } from "../components/Icons";
 
 const SAMPLE_SCRIPT = `EXT. THE OUTER HARBOUR — BEFORE DAWN
 
@@ -88,8 +88,8 @@ function ProposalCard({ item, onApprove, onReject, busy }) {
       </div>
 
       <div style={{ display: "flex", gap: 8 }}>
-        <Btn small variant="primary" disabled={busy} onClick={() => onApprove(item)}>Add to World Book</Btn>
-        <Btn small disabled={busy} onClick={() => onReject(item)}>Discard</Btn>
+        <Btn small variant="primary" disabled={busy} onClick={() => onApprove(item)} title="Add this entry to your World Book">Add to World Book</Btn>
+        <Btn small disabled={busy} onClick={() => onReject(item)} title="Discard this proposed entry">Discard</Btn>
       </div>
     </div>
   );
@@ -107,6 +107,7 @@ export default function Import({ world, addAsset }) {
   const [filter, setFilter] = useState("all");
   const [pendingIds, setPendingIds] = useState([]);
   const [pendingMatchIds, setPendingMatchIds] = useState([]);
+  const fileInputRef = useRef(null);
 
   const counts = useMemo(() => ({
     total: proposed.length,
@@ -130,6 +131,32 @@ export default function Import({ world, addAsset }) {
       setError(`Extraction failed: ${e.message}`);
     }
     setBusy(false);
+  }
+
+  // Docling companion path: same staging as extract() above, but the source
+  // text comes from an uploaded PDF/DOCX instead of the paste box. Selecting
+  // a file triggers extraction immediately (no separate submit step), mirroring
+  // how clicking "Extract entries" is the one action for the paste path.
+  async function extractFromFile(file) {
+    if (!file) return;
+    setBusy(true); setError(""); setNotice(""); setStaged(null); setProposed([]); setAddedCount(0);
+    try {
+      const res = await ingestFile(world.id, file, title || file.name);
+      setStaged(res);
+      setProposed(res.proposed);
+      if (res.offline) {
+        setError("Service unavailable — this is a rough offline extraction. Check each entry carefully before adding it.");
+      }
+    } catch (e) {
+      setError(`Extraction failed: ${e.message}`);
+    }
+    setBusy(false);
+  }
+
+  function onFileSelected(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // reset so selecting the same file again still fires onChange
+    if (file) extractFromFile(file);
   }
 
   async function approve(items) {
@@ -185,7 +212,7 @@ export default function Import({ world, addAsset }) {
         <div className="card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div className="section-label" style={{ marginBottom: 0 }}>Source document</div>
-            <Btn small variant="ghost" onClick={() => { setText(SAMPLE_SCRIPT); setTitle("Sample scene"); }}>
+            <Btn small variant="ghost" onClick={() => { setText(SAMPLE_SCRIPT); setTitle("Sample scene"); }} title="Fill the box with an example scene to try extraction">
               Load sample
             </Btn>
           </div>
@@ -206,7 +233,7 @@ export default function Import({ world, addAsset }) {
           />
 
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginTop: 14 }}>
-            <Btn variant="primary" onClick={extract} disabled={busy || !text.trim()}>
+            <Btn variant="primary" onClick={extract} disabled={busy || !text.trim()} title="Read the document and propose new World Book entries">
               <IconSpark width={16} height={16} /> Extract entries
             </Btn>
             {text.trim() && (
@@ -215,6 +242,28 @@ export default function Import({ world, addAsset }) {
               </span>
             )}
           </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "14px 0" }}>
+            <div style={{ flex: 1, height: 1, background: "var(--border-soft)" }} />
+            <span style={{ fontSize: 11, color: "var(--text-faint)", textTransform: "uppercase", letterSpacing: "0.06em" }}>or</span>
+            <div style={{ flex: 1, height: 1, background: "var(--border-soft)" }} />
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <Btn small variant="ghost" disabled={busy} onClick={() => fileInputRef.current?.click()} title="Upload a file to extract entries from (parsed by IBM Docling)">
+              <IconImport width={15} height={15} /> Upload PDF or DOCX
+            </Btn>
+            <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
+              Parsed by IBM Docling, then extracted the same way as pasted text.
+            </span>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            onChange={onFileSelected}
+            style={{ display: "none" }}
+          />
         </div>
 
         <p style={{ fontSize: 12.5, color: "var(--text-faint)", lineHeight: 1.6, margin: 0 }}>
@@ -240,7 +289,7 @@ export default function Import({ world, addAsset }) {
               </div>
             </div>
             {proposed.length > 0 && (
-              <Btn small variant="primary" disabled={pendingIds.length > 0} onClick={() => approve(visible)}>
+              <Btn small variant="primary" disabled={pendingIds.length > 0} onClick={() => approve(visible)} title="Approve and add all entries shown to your World Book">
                 Add all {filter === "all" ? "" : "shown "}({visible.length})
               </Btn>
             )}
@@ -249,7 +298,7 @@ export default function Import({ world, addAsset }) {
           {proposed.length > 0 && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               {FILTERS.map((f) => (
-                <Chip key={f.id} active={filter === f.id} onClick={() => setFilter(f.id)}>
+                <Chip key={f.id} active={filter === f.id} onClick={() => setFilter(f.id)} title={`Show only ${f.label}`}>
                   {f.label}
                   {f.id !== "all" && ` (${proposed.filter((p) => p.type === f.id).length})`}
                 </Chip>
@@ -321,7 +370,7 @@ export default function Import({ world, addAsset }) {
                     </div>
                   </div>
                   <div style={{ marginTop: 10 }}>
-                    <Btn small disabled={pendingMatchIds.includes(m.existing.id)} onClick={() => updateExisting(m)}>
+                    <Btn small disabled={pendingMatchIds.includes(m.existing.id)} onClick={() => updateExisting(m)} title="Replace the existing entry with this document's version">
                       Update existing entry
                     </Btn>
                   </div>

@@ -27,6 +27,62 @@ from generation import TYPES
 EXTRACT_TYPES = {"characters": "character", "locations": "location", "props": "lore"}
 
 
+# ── Docling file conversion (PDF/DOCX -> markdown) ───────────────────────────
+#
+# Feeds the SAME extraction pipeline below (extraction_system_prompt/
+# extraction_user_prompt, normalize_extraction) as the paste path -- Docling
+# only ever produces markdown text, which main.py's /ingest/file route hands
+# to the shared staging helper exactly like pasted text from /ingest. No
+# changes to the review/commit flow are needed.
+
+SUPPORTED_UPLOAD_EXTENSIONS = {".pdf", ".docx"}
+
+_converter_instance = None
+
+
+def _get_converter():
+    """Lazily build (and cache) the Docling converter. Importing here --
+    not at module load -- means a backend without docling installed yet
+    (e.g. before `pip install docling` has been run locally) can still serve
+    every other function in this module untouched; only a call that actually
+    needs Docling pays the import cost or surfaces the ImportError.
+    """
+    global _converter_instance
+    if _converter_instance is None:
+        try:
+            from docling.document_converter import DocumentConverter
+        except ImportError as e:
+            raise RuntimeError(
+                "Docling isn't installed on this backend. Run `pip install "
+                "docling` (see backend/requirements.txt) and restart the server."
+            ) from e
+        # Converter init loads Docling's layout/OCR models -- expensive (can be
+        # several seconds, and downloads models on first run). Built once and
+        # reused across requests rather than per-call.
+        _converter_instance = DocumentConverter()
+    return _converter_instance
+
+
+def convert_upload_to_text(filename: str, data: bytes) -> str:
+    """Convert an uploaded PDF/DOCX's raw bytes to markdown text via Docling.
+
+    Raises RuntimeError with a user-facing message on any failure (missing
+    dependency or unparsable file) -- the caller (main.py's /ingest/file
+    route) turns that into a 4xx for the UI rather than a raw 500.
+    """
+    from docling.datamodel.base_models import DocumentStream
+    import io
+
+    converter = _get_converter()  # raises RuntimeError early if not installed
+    stream = DocumentStream(name=filename, stream=io.BytesIO(data))
+    try:
+        result = converter.convert(stream)
+    except Exception as e:
+        raise RuntimeError(f"Docling couldn't parse this file: {e}") from e
+
+    return result.document.export_to_markdown()
+
+
 def extraction_system_prompt(world: dict) -> str:
     return (
         f'You are a script/document analyst for the world "{world["name"]}". '
