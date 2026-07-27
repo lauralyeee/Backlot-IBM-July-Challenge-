@@ -176,6 +176,7 @@ export default function Characters({ world, assets, addAsset }) {
         <button
           type="button"
           onClick={() => setShowTraits((v) => !v)}
+          title="Optionally lock in gender, age, appearance, or personality before generating"
           style={{
             background: "none", border: "none", cursor: "pointer", textAlign: "left",
             color: "var(--accent-strong)", fontSize: 12.5, padding: "0 2px", marginBottom: 8,
@@ -191,13 +192,14 @@ export default function Characters({ world, assets, addAsset }) {
             <Field area rows={2} value={traitPersonality} onChange={(e) => setTraitPersonality(e.target.value)} placeholder="Personality / characteristics" />
           </div>
         )}
-        <Btn variant="primary" onClick={generateNpc} disabled={genBusy} style={{ marginBottom: 14, width: "100%", justifyContent: "center" }}>
+        <Btn variant="primary" onClick={generateNpc} disabled={genBusy} title="Create a new NPC using the description and details above" style={{ marginBottom: 14, width: "100%", justifyContent: "center" }}>
           <IconPlus width={16} height={16} /> {genBusy ? "Creating…" : "Generate a new character"}
         </Btn>
         <div style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
           <button
             onClick={() => setMode("lore")}
             className={`nav-item ${mode === "lore" ? "active" : ""}`}
+            title="Ask questions answered only from your World Book"
             style={{ background: mode === "lore" ? "var(--accent-soft)" : "var(--surface)", border: "1px solid var(--border-soft)" }}
           >
             🌍 Ask about the world
@@ -210,6 +212,7 @@ export default function Characters({ world, assets, addAsset }) {
               key={c.id}
               onClick={() => setMode(String(c.id))}
               className={`nav-item ${mode === String(c.id) ? "active" : ""}`}
+              title={`Chat with ${c.title}`}
               style={{ background: mode === String(c.id) ? "var(--accent-soft)" : "var(--surface)", border: "1px solid var(--border-soft)" }}
             >
               🧑 {c.title}
@@ -250,7 +253,7 @@ export default function Characters({ world, assets, addAsset }) {
                         <div style={{ fontSize: 11, lineHeight: 1.35, padding: "0 8px", textAlign: "center" }}>
                           Image service is busy (rate limit) — wait ~15s
                         </div>
-                        <Btn small onClick={() => { setImgState("loading"); setRetryNonce((n) => n + 1); }}>
+                        <Btn small onClick={() => { setImgState("loading"); setRetryNonce((n) => n + 1); }} title="Try loading the portrait again">
                           Retry
                         </Btn>
                       </div>
@@ -268,7 +271,7 @@ export default function Characters({ world, assets, addAsset }) {
                   </button>
                 </>
               ) : (
-                <Btn small onClick={makePortrait} disabled={portraitBusy}>
+                <Btn small onClick={makePortrait} disabled={portraitBusy} title="Generate a portrait for this character">
                   {portraitBusy ? "Painting…" : "🎨 Portrait"}
                 </Btn>
               )}
@@ -283,6 +286,7 @@ export default function Characters({ world, assets, addAsset }) {
                       if (autoSpeak) stopSpeaking();
                       setAutoSpeak(!autoSpeak);
                     }}
+                    title="Automatically read this character's replies aloud"
                   >
                     🔊 Speak replies aloud
                   </Chip>
@@ -364,7 +368,7 @@ export default function Characters({ world, assets, addAsset }) {
           )}
           <Field value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()}
             placeholder={mode === "lore" ? "Type your question…" : listening ? "Listening — just talk…" : "Say something…"} />
-          <Btn variant="primary" onClick={() => send()} disabled={busy || !draft.trim()}>Send</Btn>
+          <Btn variant="primary" onClick={() => send()} disabled={busy || !draft.trim()} title="Send your message">Send</Btn>
         </div>
       </div>
 

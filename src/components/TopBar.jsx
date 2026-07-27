@@ -9,7 +9,7 @@ export default function TopBar({ title, subtitle, mode, toggleTheme, right }) {
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
         {right}
-        <button className="icon-btn" onClick={toggleTheme} aria-label="Toggle theme">
+        <button className="icon-btn" onClick={toggleTheme} aria-label="Toggle theme" title="Switch between light and dark mode">
           {mode === "dark" ? <IconSun /> : <IconMoon />}
         </button>
       </div>

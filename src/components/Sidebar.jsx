@@ -2,20 +2,20 @@ import { useState } from "react";
 import { IconHome, IconBook, IconSpark, IconChat, IconClock, IconSettings, IconChevronDown, IconImport, IconExport } from "./Icons";
 
 const TOP_NAV = [
-  { id: "home", label: "Home", icon: IconHome },
-  { id: "canon", label: "World Book", icon: IconBook },
+  { id: "home", label: "Home", icon: IconHome, title: "Home — a snapshot of your world and quick starts" },
+  { id: "canon", label: "World Book", icon: IconBook, title: "World Book — search, filter, and edit every canon entry" },
 ];
 
 const IDEA_GEN_ITEMS = [
-  { id: "create", label: "Add to World", icon: IconSpark },
-  { id: "characters", label: "Characters", icon: IconChat },
-  { id: "timeline", label: "Timeline", icon: IconClock },
+  { id: "create", label: "Add to World", icon: IconSpark, title: "Add to World — turn a fragment into a new, grounded entry" },
+  { id: "characters", label: "Characters", icon: IconChat, title: "Characters — generate NPCs and chat with them" },
+  { id: "timeline", label: "Timeline", icon: IconClock, title: "Timeline — see any entry re-rendered in a different era" },
 ];
 
 const BOTTOM_NAV = [
-  { id: "import", label: "Import", icon: IconImport },
-  { id: "export", label: "Export", icon: IconExport },
-  { id: "settings", label: "Settings", icon: IconSettings },
+  { id: "import", label: "Import", icon: IconImport, title: "Import — extract entries from a script or document" },
+  { id: "export", label: "Export", icon: IconExport, title: "Export — compile your world into a shareable document" },
+  { id: "settings", label: "Settings", icon: IconSettings, title: "Settings — manage your world, roles, eras, and appearance" },
 ];
 
 export default function Sidebar({ tab, setTab, world, assetCount }) {
@@ -42,6 +42,7 @@ export default function Sidebar({ tab, setTab, world, assetCount }) {
               <button
                 className={`nav-item ${tab === n.id ? "active" : ""}`}
                 onClick={() => setTab(n.id)}
+                title={n.title}
               >
                 <Icon className="nav-icon" />
                 {n.label}
@@ -57,6 +58,7 @@ export default function Sidebar({ tab, setTab, world, assetCount }) {
             className={`nav-item nav-group-header ${ideaGroupActive && !ideaOpen ? "active" : ""}`}
             onClick={() => setIdeaOpen((o) => !o)}
             aria-expanded={ideaOpen}
+            title="Idea Generation — expand for Add to World, Characters, and Timeline"
           >
             <IconSpark className="nav-icon" />
             Idea Generation
@@ -73,6 +75,7 @@ export default function Sidebar({ tab, setTab, world, assetCount }) {
                     <button
                       className={`nav-item nav-subitem ${tab === n.id ? "active" : ""}`}
                       onClick={() => setTab(n.id)}
+                      title={n.title}
                     >
                       <Icon className="nav-icon" />
                       {n.label}
@@ -92,6 +95,7 @@ export default function Sidebar({ tab, setTab, world, assetCount }) {
               <button
                 className={`nav-item ${tab === n.id ? "active" : ""}`}
                 onClick={() => setTab(n.id)}
+                title={n.title}
               >
                 <Icon className="nav-icon" />
                 {n.label}

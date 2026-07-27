@@ -9,24 +9,28 @@ const DOC_TYPES = [
     label: "Character breakdown sheet",
     assetType: "character",
     emptyLabel: "character",
+    hint: "Compile a profile sheet for every character in your World Book",
   },
   {
     id: "locations",
     label: "Location list",
     assetType: "location",
     emptyLabel: "location",
+    hint: "Compile a list of every location in your World Book",
   },
   {
     id: "beats",
     label: "Scene / beat outline",
     assetType: null,   // pulls all types; backend ignores era/faction for this type
     emptyLabel: "canon",
+    hint: "Compile a scene-by-scene outline spanning your whole timeline",
   },
   {
     id: "pitch",
     label: "Pitch packet",
     assetType: null,   // pulls all types; era/faction filters apply normally
     emptyLabel: "canon",
+    hint: "Compile a shareable pitch document summarizing your world",
   },
 ];
 
@@ -124,7 +128,7 @@ export default function Export({ world, assets }) {
             <div className="section-label">Document type</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
               {DOC_TYPES.map((dt) => (
-                <Chip key={dt.id} active={docTypeId === dt.id} onClick={() => pickDocType(dt.id)}>
+                <Chip key={dt.id} active={docTypeId === dt.id} onClick={() => pickDocType(dt.id)} title={dt.hint}>
                   {dt.label}
                 </Chip>
               ))}
@@ -145,6 +149,7 @@ export default function Export({ world, assets }) {
                   className="field"
                   value={era}
                   onChange={(e) => { setEra(e.target.value); setResult(null); }}
+                  title="Only include entries from this era"
                   style={{ marginTop: 8 }}
                 >
                   <option value="">All eras</option>
@@ -160,6 +165,7 @@ export default function Export({ world, assets }) {
                   className="field"
                   value={faction}
                   onChange={(e) => { setFaction(e.target.value); setResult(null); }}
+                  title="Only include entries from this faction"
                   style={{ marginTop: 8 }}
                 >
                   <option value="">All factions</option>
@@ -175,6 +181,7 @@ export default function Export({ world, assets }) {
             variant="primary"
             onClick={generate}
             disabled={busy}
+            title="Compile the selected document type into Markdown"
           >
             Generate
           </Btn>
@@ -220,6 +227,7 @@ export default function Export({ world, assets }) {
                 small
                 variant="primary"
                 onClick={() => downloadMarkdown(markdown, docTypeId)}
+                title="Download this document as a Markdown file"
               >
                 Download .md
               </Btn>

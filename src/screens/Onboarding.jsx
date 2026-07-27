@@ -126,7 +126,7 @@ export default function Onboarding({ onDone, mode, toggleTheme }) {
       </div>
 
       <div style={{ padding: "56px 64px", display: "flex", flexDirection: "column", justifyContent: "center", position: "relative" }}>
-        <button className="icon-btn" onClick={toggleTheme} style={{ position: "absolute", top: 32, right: 32 }} aria-label="Toggle theme">
+        <button className="icon-btn" onClick={toggleTheme} style={{ position: "absolute", top: 32, right: 32 }} aria-label="Toggle theme" title="Switch between light and dark mode">
           {mode === "dark" ? <IconSun /> : <IconMoon />}
         </button>
 
@@ -147,6 +147,7 @@ export default function Onboarding({ onDone, mode, toggleTheme }) {
                   <button
                     key={r.id}
                     onClick={() => toggleRole(r.id)}
+                    title={r.blurb}
                     style={{
                       display: "flex", justifyContent: "space-between", alignItems: "center",
                       textAlign: "left", padding: "16px 18px", borderRadius: "var(--radius)",
@@ -168,7 +169,7 @@ export default function Onboarding({ onDone, mode, toggleTheme }) {
                   </button>
                 ))}
               </div>
-              <Btn variant="primary" disabled={!roles.length} onClick={() => setStep(1)}>
+              <Btn variant="primary" disabled={!roles.length} onClick={() => setStep(1)} title="Continue to choosing your world's style">
                 Continue {roles.length ? `with ${roles.length} role${roles.length > 1 ? "s" : ""}` : ""} <IconArrowRight width={16} height={16} />
               </Btn>
             </div>
@@ -184,6 +185,7 @@ export default function Onboarding({ onDone, mode, toggleTheme }) {
                   <button
                     key={p.id}
                     onClick={() => handlePickPersona(p)}
+                    title={p.desc}
                     style={{ display: "block", textAlign: "left", padding: "16px 18px", borderRadius: "var(--radius)", border: "1px solid var(--border)", background: "var(--surface)", cursor: "pointer", color: "var(--text)" }}
                   >
                     <div style={{ fontWeight: 600, fontSize: 15.5 }}>{p.label}</div>
@@ -194,6 +196,7 @@ export default function Onboarding({ onDone, mode, toggleTheme }) {
                 {/* 5th option: describe your own world */}
                 <button
                   onClick={() => setShowCustom((v) => !v)}
+                  title="Describe your own world in a few sentences instead of picking a preset"
                   style={{
                     display: "block", textAlign: "left", padding: "16px 18px",
                     borderRadius: "var(--radius)",
@@ -230,13 +233,14 @@ export default function Onboarding({ onDone, mode, toggleTheme }) {
                       variant="primary"
                       disabled={customDesc.trim().length < 10 || customGenerating}
                       onClick={handleCustomGenerate}
+                      title="Generate a starting world from your description"
                     >
                       {customGenerating ? "Generating…" : "Generate"} <IconArrowRight width={16} height={16} />
                     </Btn>
                   </div>
                 )}
               </div>
-              <Btn onClick={() => setStep(0)}>Back</Btn>
+              <Btn onClick={() => setStep(0)} title="Back to choosing your roles">Back</Btn>
             </div>
           )}
 
@@ -259,8 +263,8 @@ export default function Onboarding({ onDone, mode, toggleTheme }) {
               </div>
               <Field value={name} onChange={(e) => setName(e.target.value)} placeholder="Or type your own name…" style={{ marginBottom: 20 }} />
               <div style={{ display: "flex", gap: 10 }}>
-                <Btn onClick={() => { setStep(1); setCustomOffline(false); }}>Back</Btn>
-                <Btn variant="primary" disabled={!name.trim()} onClick={() => onDone({
+                <Btn onClick={() => { setStep(1); setCustomOffline(false); }} title="Back to choosing your world's style">Back</Btn>
+                <Btn variant="primary" disabled={!name.trim()} title="Save this world and start building" onClick={() => onDone({
                   name: name.trim(), roles, personaId: persona.id, personaLabel: persona.label,
                   eras: persona.eras, ideas: persona.ideas, dialects: persona.dialects || {},
                   seed: persona.seed.map((s, i) => ({ ...s, id: i + 1, createdAt: Date.now() - (persona.seed.length - i) * 1000 })),

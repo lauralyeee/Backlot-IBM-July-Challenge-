@@ -40,7 +40,7 @@ export default function Timeline({ world, assets, addAsset }) {
       <div className="card" style={{ marginBottom: 20 }}>
         <div className="section-label">1. Pick something from your world</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
-          {assets.map((a) => <Chip key={a.id} active={subjectId === String(a.id)} onClick={() => setSubjectId(String(a.id))}>{a.title}</Chip>)}
+          {assets.map((a) => <Chip key={a.id} active={subjectId === String(a.id)} onClick={() => setSubjectId(String(a.id))} title={`Pick "${a.title}" as the subject to time-shift`}>{a.title}</Chip>)}
         </div>
 
         <div className="section-label">2. Choose an era</div>
@@ -74,7 +74,7 @@ export default function Timeline({ world, assets, addAsset }) {
           </p>
         )}
 
-        <Btn variant="primary" onClick={shift} disabled={busy || !subject} style={{ marginTop: 12 }}>
+        <Btn variant="primary" onClick={shift} disabled={busy || !subject} title="Regenerate this entry as it would appear in the chosen era" style={{ marginTop: 12 }}>
           {busy ? "Traveling…" : `Show it in ${era}`}
         </Btn>
       </div>

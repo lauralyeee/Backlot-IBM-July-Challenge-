@@ -35,7 +35,7 @@ export default function Home({ world, assets, setTab }) {
 
       <div className="grid-cards" style={{ marginBottom: 40 }}>
         {QUICK_START.map((q) => (
-          <div key={q.id} className="card card-hover" onClick={() => setTab(q.id)} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div key={q.id} className="card card-hover" onClick={() => setTab(q.id)} title={q.text} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <div style={{ fontSize: 26 }}>{q.icon}</div>
             <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 17 }}>{q.title}</div>
             <p style={{ fontSize: 13.5, color: "var(--text-dim)", lineHeight: 1.55, flex: 1 }}>{q.text}</p>
@@ -50,7 +50,7 @@ export default function Home({ world, assets, setTab }) {
         <div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
             <h2 style={{ fontSize: 18 }}>Recently added</h2>
-            <Btn small variant="ghost" onClick={() => setTab("canon")}>View all <IconArrowRight width={14} height={14} /></Btn>
+            <Btn small variant="ghost" onClick={() => setTab("canon")} title="See every entry in your World Book">View all <IconArrowRight width={14} height={14} /></Btn>
           </div>
           {recent.length === 0 ? (
             <div className="card" style={{ color: "var(--text-dim)", fontSize: 14.5 }}>Nothing yet — add your first idea to see it here.</div>

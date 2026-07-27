@@ -175,15 +175,15 @@ export default function Settings({ world, setWorld, onWorldUpdated, refreshAsset
         <p style={{ fontSize: 13.5, color: "var(--text-dim)", marginBottom: 12 }}>
           If nothing is generating, run this first — it shows whether the problem is the service or your world.
         </p>
-        <Btn small onClick={testConnection} disabled={pinging}>{pinging ? "Testing…" : "Test connection"}</Btn>
+        <Btn small onClick={testConnection} disabled={pinging} title="Check whether the AI backend is reachable">{pinging ? "Testing…" : "Test connection"}</Btn>
         {ping && <p style={{ fontSize: 13.5, color: ping.ok ? "var(--ok)" : "var(--danger)", marginTop: 10 }}>{ping.ok ? "✓ " : "✕ "}{ping.text}</p>}
       </div>
 
       <div className="card" style={{ marginBottom: 20 }}>
         <h3 style={{ fontSize: 15.5, marginBottom: 10 }}>Appearance</h3>
         <div style={{ display: "flex", gap: 8 }}>
-          <Chip active={mode === "light"} onClick={() => mode !== "light" && toggleTheme()}>☀ Light</Chip>
-          <Chip active={mode === "dark"} onClick={() => mode !== "dark" && toggleTheme()}>🌙 Dark</Chip>
+          <Chip active={mode === "light"} onClick={() => mode !== "light" && toggleTheme()} title="Switch to light theme">☀ Light</Chip>
+          <Chip active={mode === "dark"} onClick={() => mode !== "dark" && toggleTheme()} title="Switch to dark theme">🌙 Dark</Chip>
         </div>
       </div>
 
@@ -195,6 +195,7 @@ export default function Settings({ world, setWorld, onWorldUpdated, refreshAsset
             <button
               key={r.id}
               onClick={() => toggleRole(r.id)}
+              title={r.blurb}
               style={{
                 display: "flex", justifyContent: "space-between", alignItems: "center", textAlign: "left", padding: "12px 14px",
                 borderRadius: "var(--radius-sm)", border: `1.5px solid ${world.roles.includes(r.id) ? "var(--accent)" : "var(--border)"}`,
@@ -214,7 +215,7 @@ export default function Settings({ world, setWorld, onWorldUpdated, refreshAsset
         <h3 style={{ fontSize: 15.5, marginBottom: 4 }}>World style</h3>
         <p style={{ fontSize: 13.5, color: "var(--text-dim)", marginBottom: 12 }}>Changes the voice, eras, and starter ideas for new content. Existing entries stay as they are.</p>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          {PERSONAS.map((p) => <Chip key={p.id} active={world.personaId === p.id} onClick={() => changePersona(p)}>{p.label}</Chip>)}
+          {PERSONAS.map((p) => <Chip key={p.id} active={world.personaId === p.id} onClick={() => changePersona(p)} title={p.desc}>{p.label}</Chip>)}
         </div>
       </div>
 
@@ -240,18 +241,18 @@ export default function Settings({ world, setWorld, onWorldUpdated, refreshAsset
                     placeholder="What defines this era? 1-2 sentences — events, tone, tech/culture. Time-Shift and portraits read this."
                   />
                   <div style={{ display: "flex", gap: 6 }}>
-                    <Btn small onClick={saveRenameEra} disabled={eraBusy}>Save</Btn>
-                    <Btn small onClick={cancelRenameEra}>Cancel</Btn>
+                    <Btn small onClick={saveRenameEra} disabled={eraBusy} title="Save this era's name and description">Save</Btn>
+                    <Btn small onClick={cancelRenameEra} title="Discard changes">Cancel</Btn>
                   </div>
                 </>
               ) : (
                 <>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <span style={{ flex: 1, fontSize: 14 }}>{era}</span>
-                    <Btn small onClick={() => moveEra(i, -1)} disabled={eraBusy || i === 0}>↑</Btn>
-                    <Btn small onClick={() => moveEra(i, 1)} disabled={eraBusy || i === world.eras.length - 1}>↓</Btn>
-                    <Btn small onClick={() => startRenameEra(i)} disabled={eraBusy}>Edit</Btn>
-                    <Btn small onClick={() => attemptRemoveEra(era)} disabled={eraBusy || world.eras.length <= 1}>Remove</Btn>
+                    <Btn small onClick={() => moveEra(i, -1)} disabled={eraBusy || i === 0} title="Move earlier in the timeline">↑</Btn>
+                    <Btn small onClick={() => moveEra(i, 1)} disabled={eraBusy || i === world.eras.length - 1} title="Move later in the timeline">↓</Btn>
+                    <Btn small onClick={() => startRenameEra(i)} disabled={eraBusy} title="Rename or add a description for this era">Edit</Btn>
+                    <Btn small onClick={() => attemptRemoveEra(era)} disabled={eraBusy || world.eras.length <= 1} title="Remove this era from the timeline">Remove</Btn>
                   </div>
                   {((world.eraNotes || {})[era] || "").trim() ? (
                     <div style={{ fontSize: 12.5, color: "var(--text-dim)", lineHeight: 1.5 }}>{world.eraNotes[era]}</div>
@@ -272,8 +273,8 @@ export default function Settings({ world, setWorld, onWorldUpdated, refreshAsset
                 {world.eras.filter((e) => e !== pendingRemoveEra).map((e) => <option key={e} value={e}>{e}</option>)}
               </select>
               <div style={{ display: "flex", gap: 8 }}>
-                <Btn small onClick={confirmRemoveWithMerge} disabled={eraBusy}>Move &amp; remove</Btn>
-                <Btn small onClick={() => setPendingRemoveEra(null)}>Cancel</Btn>
+                <Btn small onClick={confirmRemoveWithMerge} disabled={eraBusy} title="Move affected entries to the selected era, then remove this one">Move &amp; remove</Btn>
+                <Btn small onClick={() => setPendingRemoveEra(null)} title="Cancel removing this era">Cancel</Btn>
               </div>
             </div>
           </Banner>
@@ -281,9 +282,9 @@ export default function Settings({ world, setWorld, onWorldUpdated, refreshAsset
 
         <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
           <Field value={newEraName} onChange={(e) => setNewEraName(e.target.value)} placeholder="Add a new era…" />
-          <Btn small onClick={addEra} disabled={!newEraName.trim()}>Add</Btn>
+          <Btn small onClick={addEra} disabled={!newEraName.trim()} title="Add this as a new era">Add</Btn>
         </div>
-        <Btn small onClick={autoDescribe} disabled={describeBusy || eraBusy}>
+        <Btn small onClick={autoDescribe} disabled={describeBusy || eraBusy} title="Automatically write short descriptions for eras that don't have one yet">
           {describeBusy ? "Writing descriptions…" : "✨ Auto-describe eras (fills empty ones)"}
         </Btn>
       </div>
@@ -292,14 +293,14 @@ export default function Settings({ world, setWorld, onWorldUpdated, refreshAsset
         <h3 style={{ fontSize: 15.5, marginBottom: 10 }}>World name</h3>
         <div style={{ display: "flex", gap: 8 }}>
           <Field value={name} onChange={(e) => setName(e.target.value)} />
-          <Btn small onClick={() => { if (name.trim()) { setWorld({ ...world, name: name.trim() }); flash(); } }} disabled={!name.trim() || name.trim() === world.name}>Save</Btn>
+          <Btn small onClick={() => { if (name.trim()) { setWorld({ ...world, name: name.trim() }); flash(); } }} disabled={!name.trim() || name.trim() === world.name} title="Save the new world name">Save</Btn>
         </div>
       </div>
 
       <div className="card">
         <h3 style={{ fontSize: 15.5, marginBottom: 6, color: "var(--danger)" }}>Danger zone</h3>
         <p style={{ fontSize: 13.5, color: "var(--text-dim)", marginBottom: 12 }}>Clears your world and restarts onboarding.</p>
-        <Btn small onClick={resetWorld}>Reset world</Btn>
+        <Btn small onClick={resetWorld} title="Clear this world and start onboarding again — cannot be undone">Reset world</Btn>
       </div>
     </div>
   );

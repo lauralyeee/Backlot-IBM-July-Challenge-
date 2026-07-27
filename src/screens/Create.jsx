@@ -48,7 +48,7 @@ export default function Create({ world, assets, addAsset }) {
           <div className="section-label">Starter ideas</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {(world.ideas || []).map((idea) => (
-              <Chip key={idea.label} active={picked === idea.label} onClick={() => pickIdea(idea)}>{idea.label}</Chip>
+              <Chip key={idea.label} active={picked === idea.label} onClick={() => pickIdea(idea)} title={idea.text}>{idea.label}</Chip>
             ))}
           </div>
         </div>
@@ -58,10 +58,10 @@ export default function Create({ world, assets, addAsset }) {
           <Field area rows={4} value={fragment} onChange={(e) => { setFragment(e.target.value); setPicked(null); }}
             placeholder="Any small idea works — a name, a place, one sentence." />
           <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
-            <Btn variant="primary" onClick={() => run("expand")} disabled={busy || !fragment.trim()}>
+            <Btn variant="primary" onClick={() => run("expand")} disabled={busy || !fragment.trim()} title="Expand your written fragment into a full entry, grounded in your world's canon">
               <IconSpark width={16} height={16} /> Grow my idea
             </Btn>
-            <Btn onClick={() => run("character")} disabled={busy}>Surprise me with a character</Btn>
+            <Btn onClick={() => run("character")} disabled={busy} title="Generate a brand-new character connected to your world">Surprise me with a character</Btn>
           </div>
         </div>
 

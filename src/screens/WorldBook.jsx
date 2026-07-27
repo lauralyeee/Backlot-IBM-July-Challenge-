@@ -77,16 +77,16 @@ export default function WorldBook({ world, assets, setTab, removeAsset, addAsset
       <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
         <div style={{ position: "relative", flex: "1 1 280px" }}>
           <IconSearch style={{ position: "absolute", left: 13, top: 13, color: "var(--text-faint)" }} />
-          <Field value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search your world…" style={{ paddingLeft: 40 }} />
+          <Field value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search your world…" title="Search title, content, era, faction, or type" style={{ paddingLeft: 40 }} />
         </div>
-        <Btn onClick={checkConsistency} disabled={busy || assets.length < 2}>Check my world</Btn>
+        <Btn onClick={checkConsistency} disabled={busy || assets.length < 2} title="Run a consistency check across all your entries">Check my world</Btn>
       </div>
 
       <div style={{ marginBottom: 20, display: "flex", flexWrap: "wrap", gap: 8 }}>
-        <Chip active={typeFilter === "all"} onClick={() => setTypeFilter("all")}>All ({assets.length})</Chip>
+        <Chip active={typeFilter === "all"} onClick={() => setTypeFilter("all")} title="Show every entry">All ({assets.length})</Chip>
         {TYPES.map((t) => {
           const count = assets.filter((a) => a.type === t).length;
-          return <Chip key={t} active={typeFilter === t} onClick={() => setTypeFilter(t)}>{TYPE_META[t].icon} {TYPE_META[t].label} ({count})</Chip>;
+          return <Chip key={t} active={typeFilter === t} onClick={() => setTypeFilter(t)} title={`Show only ${TYPE_META[t].label}`}>{TYPE_META[t].icon} {TYPE_META[t].label} ({count})</Chip>;
         })}
       </div>
 
@@ -166,10 +166,11 @@ export default function WorldBook({ world, assets, setTab, removeAsset, addAsset
                       variant="primary"
                       disabled={editSaving || !editForm.title?.trim() || !editForm.content?.trim()}
                       onClick={() => saveEdit(a)}
+                      title="Save changes to this entry"
                     >
                       Save
                     </Btn>
-                    <Btn small disabled={editSaving} onClick={cancelEdit}>Cancel</Btn>
+                    <Btn small disabled={editSaving} onClick={cancelEdit} title="Discard changes">Cancel</Btn>
                   </div>
                 </div>
               ) : (
