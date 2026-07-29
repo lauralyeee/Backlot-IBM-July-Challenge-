@@ -247,8 +247,9 @@ export default function AssistantChat() {
             {messages.length === 0 && (
               <div style={styles.emptyWrap}>
                 <div style={styles.empty}>
-                  Hi! I'm your worldbuilding assistant, running on IBM Granite. Ask me about your story, or how to
-                  use the app — here are a few ideas to get started:
+                  Hey there! I'm your worldbuilding partner. I'm powered by IBM Granite and ready to help you shape
+                  your universe. Ask me anything about your story, or find out how to navigate the app. Here are a
+                  few ideas to jump in:
                 </div>
                 <div style={styles.suggestions}>
                   {suggestions.map((s) => (
