@@ -5,6 +5,7 @@ Tables: worlds, assets.
 
 import sqlite3
 import os
+import difflib
 from pathlib import Path
 
 DB_PATH = os.environ.get("DB_PATH", str(Path(__file__).parent / "worldbuilding.db"))
@@ -58,6 +59,17 @@ def init_db():
             );
 
             CREATE INDEX IF NOT EXISTS idx_documents_world ON documents(world_id);
+
+            CREATE TABLE IF NOT EXISTS relationships (
+                id                  TEXT PRIMARY KEY,
+                world_id            TEXT NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+                asset_a_title       TEXT NOT NULL,
+                asset_b_title       TEXT NOT NULL,
+                context             TEXT NOT NULL,
+                source_document_id  TEXT,
+                created_at          INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_relationships_world ON relationships(world_id);
         """)
         # Migration: add source_asset_id column if it doesn't exist yet
         # (safe to run every startup — ALTER TABLE is a no-op when already present)
@@ -440,3 +452,80 @@ def find_asset_by_name(world_id: str, title: str, type_: str) -> dict | None:
             (world_id, type_, title),
         ).fetchone()
     return _row_to_asset(row) if row else None
+
+
+def find_asset_matches(world_id: str, title: str, type_: str) -> dict | None:
+    """v2 of find_asset_by_name: tries an exact match first, then falls back
+    to a fuzzy/alias match (substring containment or a high similarity
+    ratio) so near-duplicate names (nicknames, minor spelling variants,
+    "Mareth" vs "Mareth Soll") still surface as a match instead of silently
+    creating a duplicate entry. Returns {"asset": ..., "confidence": "exact"
+    | "likely"} or None. find_asset_by_name itself is left untouched so any
+    other caller relying on strict exact-match behavior is unaffected."""
+    exact = find_asset_by_name(world_id, title, type_)
+    if exact:
+        return {"asset": exact, "confidence": "exact"}
+
+    title_lower = title.lower().strip()
+    if len(title_lower) < 3:
+        return None
+
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM assets WHERE world_id = ? AND type = ?", (world_id, type_)
+        ).fetchall()
+
+    best_row, best_score = None, 0.0
+    for row in rows:
+        candidate_lower = (row["title"] or "").lower().strip()
+        if len(candidate_lower) < 3:
+            continue
+        contains = title_lower in candidate_lower or candidate_lower in title_lower
+        ratio = difflib.SequenceMatcher(None, title_lower, candidate_lower).ratio()
+        if not (contains or ratio >= 0.82):
+            continue
+        score = max(ratio, 0.82) if contains else ratio
+        if score > best_score:
+            best_score, best_row = score, row
+
+    if best_row is not None:
+        return {"asset": _row_to_asset(best_row), "confidence": "likely"}
+    return None
+
+
+# ── Relationships (Feature 1 extension: persisted character/asset links) ────
+
+def create_relationship(data: dict) -> dict:
+    with _connect() as conn:
+        conn.execute(
+            """INSERT INTO relationships (id, world_id, asset_a_title, asset_b_title, context, source_document_id, created_at)
+               VALUES (:id, :world_id, :asset_a_title, :asset_b_title, :context, :source_document_id, :created_at)""",
+            data,
+        )
+    return get_relationship(data["id"])
+
+
+def get_relationship(relationship_id: str) -> dict | None:
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM relationships WHERE id = ?", (relationship_id,)).fetchone()
+    return _row_to_relationship(row) if row else None
+
+
+def list_relationships(world_id: str) -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM relationships WHERE world_id = ? ORDER BY created_at ASC", (world_id,)
+        ).fetchall()
+    return [_row_to_relationship(r) for r in rows]
+
+
+def _row_to_relationship(row) -> dict:
+    return {
+        "id": row["id"],
+        "worldId": row["world_id"],
+        "a": row["asset_a_title"],
+        "b": row["asset_b_title"],
+        "context": row["context"],
+        "sourceDocumentId": row["source_document_id"],
+        "createdAt": row["created_at"],
+    }

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { generateAsset, ask, generatePortrait, designCharacterVoice, confirmCharacterVoice } from "../lib/api";
+import { generateAsset, ask, generatePortrait, designCharacterVoice, confirmCharacterVoice, listRelationships } from "../lib/api";
 import { offlineAsset } from "../lib/generation";
 import { speakAsCharacterOrFallback, stopSpeaking, voiceSupported } from "../lib/voice";
 import { portraitUrl, preloadExpressions, hasPortrait } from "../lib/portrait";
@@ -35,6 +35,23 @@ export default function Characters({ world, assets, addAsset }) {
   const scrollRef = useRef(null);
   const thread = threads[mode] || [];
   const activeChar = characters.find((c) => String(c.id) === mode);
+
+  // Relationships persisted via Import's script-ingestion flow (Feature 1
+  // extension) -- fetched once per world and filtered client-side to
+  // whichever ones mention the currently active character.
+  const [relationships, setRelationships] = useState([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    listRelationships(world.id).then((rels) => { if (!cancelled) setRelationships(rels); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [world.id]);
+
+  const charRelationships = activeChar
+    ? relationships.filter(
+        (r) => r.a.toLowerCase() === activeChar.title.toLowerCase() || r.b.toLowerCase() === activeChar.title.toLowerCase()
+      )
+    : [];
 
   // The portrait's current expression follows the emotion tag on the
   // character's most recent reply (defaults to neutral before any reply).
@@ -360,6 +377,21 @@ export default function Characters({ world, assets, addAsset }) {
                         <IconMic width={13} height={13} /> {voiceBusy ? "Casting…" : "Recast voice"}
                       </Btn>
                     )}
+                  </div>
+                )}
+                {charRelationships.length > 0 && (
+                  <div style={{ marginTop: 10 }}>
+                    <div style={{ fontSize: 11.5, color: "var(--text-faint)", textTransform: "uppercase" }}>Known relationships</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                      {charRelationships.map((r) => {
+                        const other = r.a.toLowerCase() === activeChar.title.toLowerCase() ? r.b : r.a;
+                        return (
+                          <div key={r.id} style={{ fontSize: 12.5 }}>
+                            <strong>{other}</strong>{r.context ? ` — ${r.context}` : ""}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </div>
