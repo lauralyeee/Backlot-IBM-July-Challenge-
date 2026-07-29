@@ -1,10 +1,19 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ROLES, PERSONAS } from "../lib/worldData";
-import { pingBackend, renameEra, removeEra, describeEras } from "../lib/api";
+import { pingBackend } from "../lib/api";
 import { Chip, Field, Btn, Banner } from "../components/ui";
+import { IconCheck, IconClose, IconSun, IconMoon } from "../components/Icons";
 
-export default function Settings({ world, setWorld, onWorldUpdated, refreshAssets, mode, toggleTheme, onReset }) {
+export default function Settings({ world, setWorld, mode, toggleTheme, onReset }) {
   const [name, setName] = useState(world.name);
+  const [archetype, setArchetype] = useState(world.personaLabel || "");
+  const [desc, setDesc] = useState(world.description || "");
+
+  // Picking a World style below also changes personaLabel -- keep this field's
+  // local draft in sync so it doesn't show stale text after that action.
+  useEffect(() => {
+    setArchetype(world.personaLabel || "");
+  }, [world.personaLabel]); // eslint-disable-line react-hooks/exhaustive-deps
   const [saved, setSaved] = useState(false);
   const [ping, setPing] = useState(null);
   const [pinging, setPinging] = useState(false);
@@ -34,132 +43,6 @@ export default function Settings({ world, setWorld, onWorldUpdated, refreshAsset
     setWorld({ ...world, personaId: p.id, personaLabel: p.label, eras: p.eras, ideas: p.ideas, dialects: p.dialects || {} }); flash();
   };
 
-  // ── Timeline / eras editor ─────────────────────────────────────────────
-  const [eraEditIndex, setEraEditIndex] = useState(null);
-  const [eraEditValue, setEraEditValue] = useState("");
-  const [eraNoteValue, setEraNoteValue] = useState("");
-  const [describeBusy, setDescribeBusy] = useState(false);
-  const [newEraName, setNewEraName] = useState("");
-  const [eraBusy, setEraBusy] = useState(false);
-  const [eraError, setEraError] = useState("");
-  const [pendingRemoveEra, setPendingRemoveEra] = useState(null);
-  const [mergeTarget, setMergeTarget] = useState("");
-
-  function startRenameEra(i) {
-    setEraEditIndex(i);
-    setEraEditValue(world.eras[i]);
-    setEraNoteValue((world.eraNotes || {})[world.eras[i]] || "");
-    setEraError("");
-  }
-
-  function cancelRenameEra() {
-    setEraEditIndex(null);
-    setEraEditValue("");
-  }
-
-  async function saveRenameEra() {
-    const oldEra = world.eras[eraEditIndex];
-    const newEra = eraEditValue.trim();
-    const newNote = eraNoteValue.trim();
-    const oldNote = ((world.eraNotes || {})[oldEra] || "").trim();
-    if (!newEra) { cancelRenameEra(); return; }
-    if (newEra !== oldEra && world.eras.some((e, i) => i !== eraEditIndex && e.toLowerCase() === newEra.toLowerCase())) {
-      setEraError(`"${newEra}" already exists in this timeline.`);
-      return;
-    }
-    if (newEra === oldEra && newNote === oldNote) { cancelRenameEra(); return; }
-    setEraBusy(true); setEraError("");
-    try {
-      let current = world;
-      if (newEra !== oldEra) {
-        // Rename goes through the dedicated endpoint so the note key AND
-        // every asset tagged with the old era name follow the rename.
-        const res = await renameEra(world.id, oldEra, newEra);
-        current = res.world;
-        onWorldUpdated(res.world);
-        if (res.assetsUpdated > 0) await refreshAssets();
-      }
-      if (newNote !== oldNote) {
-        setWorld({ ...current, eraNotes: { ...(current.eraNotes || {}), [newEra]: newNote } });
-      }
-      setEraEditIndex(null); setEraEditValue(""); setEraNoteValue("");
-      flash();
-    } catch (e) {
-      setEraError(`Couldn't save: ${e.message}`);
-    }
-    setEraBusy(false);
-  }
-
-  // Pure reorder — same era strings, new order, no asset cascade needed —
-  // so this just goes through the ordinary setWorld/patchWorld path.
-  function moveEra(i, dir) {
-    const j = i + dir;
-    if (j < 0 || j >= world.eras.length) return;
-    const next = [...world.eras];
-    [next[i], next[j]] = [next[j], next[i]];
-    setWorld({ ...world, eras: next });
-    flash();
-  }
-
-  // Pure append — no existing asset can already reference a brand-new era
-  // name, so no cascade needed here either.
-  function addEra() {
-    const name = newEraName.trim();
-    if (!name) return;
-    if (world.eras.some((e) => e.toLowerCase() === name.toLowerCase())) {
-      setEraError(`"${name}" already exists in this timeline.`);
-      return;
-    }
-    setEraError("");
-    setWorld({ ...world, eras: [...world.eras, name] });
-    setNewEraName("");
-    flash();
-  }
-
-  async function attemptRemoveEra(era) {
-    setEraError(""); setEraBusy(true);
-    try {
-      const res = await removeEra(world.id, era);
-      onWorldUpdated(res.world);
-      if (res.assetsReassigned > 0) await refreshAssets();
-      flash();
-    } catch (e) {
-      if (e.message.includes("409")) {
-        setPendingRemoveEra(era);
-        setMergeTarget(world.eras.find((x) => x !== era) || "");
-      } else {
-        setEraError(`Couldn't remove: ${e.message}`);
-      }
-    }
-    setEraBusy(false);
-  }
-
-  async function autoDescribe() {
-    setDescribeBusy(true); setEraError("");
-    try {
-      const res = await describeEras(world.id);
-      onWorldUpdated(res.world);
-      flash();
-    } catch (e) {
-      setEraError(`Couldn't write descriptions: ${e.message}`);
-    }
-    setDescribeBusy(false);
-  }
-
-  async function confirmRemoveWithMerge() {
-    setEraBusy(true); setEraError("");
-    try {
-      const res = await removeEra(world.id, pendingRemoveEra, mergeTarget);
-      onWorldUpdated(res.world);
-      await refreshAssets();
-      setPendingRemoveEra(null);
-      flash();
-    } catch (e) {
-      setEraError(`Couldn't remove: ${e.message}`);
-    }
-    setEraBusy(false);
-  }
-
   function resetWorld() {
     if (!confirm("This clears your saved world and restarts onboarding. Continue?")) return;
     onReset();
@@ -167,7 +50,7 @@ export default function Settings({ world, setWorld, onWorldUpdated, refreshAsset
 
   return (
     <div className="fade-in content-narrow">
-      <h1 style={{ fontSize: 26, marginBottom: 24 }}>Settings</h1>
+      <h1 style={{ fontSize: 28, marginBottom: 24 }}>Settings</h1>
       {saved && <Banner tone="ok">Saved.</Banner>}
 
       <div className="card" style={{ marginBottom: 20 }}>
@@ -176,14 +59,18 @@ export default function Settings({ world, setWorld, onWorldUpdated, refreshAsset
           If nothing is generating, run this first — it shows whether the problem is the service or your world.
         </p>
         <Btn small onClick={testConnection} disabled={pinging} title="Check whether the AI backend is reachable">{pinging ? "Testing…" : "Test connection"}</Btn>
-        {ping && <p style={{ fontSize: 13.5, color: ping.ok ? "var(--ok)" : "var(--danger)", marginTop: 10 }}>{ping.ok ? "✓ " : "✕ "}{ping.text}</p>}
+        {ping && (
+          <p style={{ fontSize: 13.5, color: ping.ok ? "var(--ok)" : "var(--danger)", marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}>
+            {ping.ok ? <IconCheck width={14} height={14} /> : <IconClose width={14} height={14} />} {ping.text}
+          </p>
+        )}
       </div>
 
       <div className="card" style={{ marginBottom: 20 }}>
         <h3 style={{ fontSize: 15.5, marginBottom: 10 }}>Appearance</h3>
         <div style={{ display: "flex", gap: 8 }}>
-          <Chip active={mode === "light"} onClick={() => mode !== "light" && toggleTheme()} title="Switch to light theme">☀ Light</Chip>
-          <Chip active={mode === "dark"} onClick={() => mode !== "dark" && toggleTheme()} title="Switch to dark theme">🌙 Dark</Chip>
+          <Chip active={mode === "light"} onClick={() => mode !== "light" && toggleTheme()} title="Switch to light theme"><IconSun width={13} height={13} /> Light</Chip>
+          <Chip active={mode === "dark"} onClick={() => mode !== "dark" && toggleTheme()} title="Switch to dark theme"><IconMoon width={13} height={13} /> Dark</Chip>
         </div>
       </div>
 
@@ -220,73 +107,25 @@ export default function Settings({ world, setWorld, onWorldUpdated, refreshAsset
       </div>
 
       <div className="card" style={{ marginBottom: 20 }}>
-        <h3 style={{ fontSize: 15.5, marginBottom: 4 }}>Timeline / eras</h3>
-        <p style={{ fontSize: 13.5, color: "var(--text-dim)", marginBottom: 12 }}>
-          Not fixed to 3 — add, edit, reorder, or remove eras. Order is the world's chronology.
-          The descriptions matter: Time-Shift and portrait generation read them to understand
-          what each era actually means, instead of guessing from its name.
+        <h3 style={{ fontSize: 15.5, marginBottom: 6 }}>World archetype</h3>
+        <p style={{ fontSize: 13, color: "var(--text-dim)", marginBottom: 10 }}>
+          The short label under your world's name in the sidebar, and how the AI refers to its own role while
+          generating ("You are the resident ___ of the world..."). Picking a World style above sets this for you —
+          edit it here to fine-tune the exact wording without changing your eras or starter ideas.
         </p>
-        {eraError && <p style={{ fontSize: 13, color: "var(--danger)", marginBottom: 10 }}>{eraError}</p>}
-        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
-          {world.eras.map((era, i) => (
-            <div key={era} style={{ display: "flex", flexDirection: "column", gap: 6, padding: "8px 10px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
-              {eraEditIndex === i ? (
-                <>
-                  <Field value={eraEditValue} onChange={(e) => setEraEditValue(e.target.value)} />
-                  <Field
-                    area
-                    rows={2}
-                    value={eraNoteValue}
-                    onChange={(e) => setEraNoteValue(e.target.value)}
-                    placeholder="What defines this era? 1-2 sentences — events, tone, tech/culture. Time-Shift and portraits read this."
-                  />
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <Btn small onClick={saveRenameEra} disabled={eraBusy} title="Save this era's name and description">Save</Btn>
-                    <Btn small onClick={cancelRenameEra} title="Discard changes">Cancel</Btn>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ flex: 1, fontSize: 14 }}>{era}</span>
-                    <Btn small onClick={() => moveEra(i, -1)} disabled={eraBusy || i === 0} title="Move earlier in the timeline">↑</Btn>
-                    <Btn small onClick={() => moveEra(i, 1)} disabled={eraBusy || i === world.eras.length - 1} title="Move later in the timeline">↓</Btn>
-                    <Btn small onClick={() => startRenameEra(i)} disabled={eraBusy} title="Rename or add a description for this era">Edit</Btn>
-                    <Btn small onClick={() => attemptRemoveEra(era)} disabled={eraBusy || world.eras.length <= 1} title="Remove this era from the timeline">Remove</Btn>
-                  </div>
-                  {((world.eraNotes || {})[era] || "").trim() ? (
-                    <div style={{ fontSize: 12.5, color: "var(--text-dim)", lineHeight: 1.5 }}>{world.eraNotes[era]}</div>
-                  ) : (
-                    <div style={{ fontSize: 12, color: "var(--text-faint)" }}>No description yet — Edit to write one, or use ✨ Auto-describe below.</div>
-                  )}
-                </>
-              )}
-            </div>
-          ))}
+        <div style={{ display: "flex", gap: 8 }}>
+          <Field value={archetype} onChange={(e) => setArchetype(e.target.value)} placeholder="e.g. Dark-comedy crime thriller" />
+          <Btn small onClick={() => { if (archetype.trim()) { setWorld({ ...world, personaLabel: archetype.trim() }); flash(); } }} disabled={!archetype.trim() || archetype.trim() === (world.personaLabel || "")} title="Save this world's archetype label">Save</Btn>
         </div>
+      </div>
 
-        {pendingRemoveEra && (
-          <Banner tone="danger">
-            <div>
-              <div style={{ marginBottom: 8 }}>Entries still use "{pendingRemoveEra}". Move them to another era first:</div>
-              <select value={mergeTarget} onChange={(e) => setMergeTarget(e.target.value)} style={{ marginBottom: 8, width: "100%", padding: "8px 10px", borderRadius: "var(--radius-sm)", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}>
-                {world.eras.filter((e) => e !== pendingRemoveEra).map((e) => <option key={e} value={e}>{e}</option>)}
-              </select>
-              <div style={{ display: "flex", gap: 8 }}>
-                <Btn small onClick={confirmRemoveWithMerge} disabled={eraBusy} title="Move affected entries to the selected era, then remove this one">Move &amp; remove</Btn>
-                <Btn small onClick={() => setPendingRemoveEra(null)} title="Cancel removing this era">Cancel</Btn>
-              </div>
-            </div>
-          </Banner>
-        )}
-
-        <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-          <Field value={newEraName} onChange={(e) => setNewEraName(e.target.value)} placeholder="Add a new era…" />
-          <Btn small onClick={addEra} disabled={!newEraName.trim()} title="Add this as a new era">Add</Btn>
-        </div>
-        <Btn small onClick={autoDescribe} disabled={describeBusy || eraBusy} title="Automatically write short descriptions for eras that don't have one yet">
-          {describeBusy ? "Writing descriptions…" : "✨ Auto-describe eras (fills empty ones)"}
-        </Btn>
+      <div className="card" style={{ marginBottom: 20 }}>
+        <h3 style={{ fontSize: 15.5, marginBottom: 6 }}>World premise</h3>
+        <p style={{ fontSize: 13, color: "var(--text-dim)", marginBottom: 10 }}>
+          A short summary of what this world is about — every generation and character chat reads this, so it's how the AI knows more than just your world's name.
+        </p>
+        <Field area rows={3} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="A few sentences — genre, setting, what's at stake…" style={{ marginBottom: 10 }} />
+        <Btn small onClick={() => { setWorld({ ...world, description: desc.trim() }); flash(); }} disabled={desc.trim() === (world.description || "")} title="Save this world's premise">Save</Btn>
       </div>
 
       <div className="card" style={{ marginBottom: 20 }}>

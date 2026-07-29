@@ -49,6 +49,110 @@ export const updateAsset = (worldId, assetId, data) =>
 export const generatePortrait = (worldId, assetId) =>
   req("POST", `/worlds/${worldId}/assets/${assetId}/portrait`);
 
+// ── AI-cast character voice (Gemini TTS) ────────────────────────────────────
+
+/**
+ * Draft a voice description via Granite, then pick a matching fixed
+ * Gemini TTS voice and get one preview clip. Nothing is saved yet —
+ * call again for a fresh take (regenerate), or confirmCharacterVoice()
+ * once the preview sounds right.
+ * @param {string} worldId
+ * @param {number} assetId
+ * @param {string[]} [excludeVoiceIds]  voices already shown this casting
+ *   session — passed back so regenerate doesn't repeat the same voice.
+ * @returns {{ voiceDescription, voiceId, voiceName, audioBase64, offline? }}
+ */
+export const designCharacterVoice = (worldId, assetId, excludeVoiceIds = []) =>
+  req("POST", `/worlds/${worldId}/assets/${assetId}/voice/design`, { excludeVoiceIds });
+
+/**
+ * Lock in a previewed library voice as this character's permanent voice —
+ * every future reply for them reuses it from here on.
+ * @returns {{ asset }}
+ */
+export const confirmCharacterVoice = (worldId, assetId, voiceId, voiceDescription) =>
+  req("POST", `/worlds/${worldId}/assets/${assetId}/voice/confirm`, {
+    voiceId,
+    voiceDescription,
+  });
+
+/**
+ * Synthesize `text` in a character's already-cast voice. Returns a
+ * playable object URL, or throws if no voice is cast yet / the service is
+ * unavailable — callers should catch and fall back to Web Speech (see
+ * src/lib/voice.js speak()).
+ * @param {string} worldId
+ * @param {number} assetId
+ * @param {string} text
+ * @returns {Promise<string>} an object URL for an <audio> element
+ */
+export async function speakAsCharacter(worldId, assetId, text) {
+  const res = await fetch(`${BASE}/worlds/${worldId}/assets/${assetId}/voice/speak`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`API POST voice/speak → ${res.status}: ${detail}`);
+  }
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}
+
+// ── Concept media: 3D model, image, or video (manual upload + Blender/CharMorph generation) ──
+
+/**
+ * Manual import: upload a pre-made 3D model (.glb/.gltf), a concept-art
+ * image, or a short video as an asset's concept media. The backend
+ * classifies which kind it is by file extension and returns it as
+ * asset.modelKind ("3d" | "image" | "video").
+ * @param {string} worldId
+ * @param {number} assetId
+ * @param {File} file
+ * @returns {{ asset }}
+ */
+export async function uploadModel3D(worldId, assetId, file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`${BASE}/worlds/${worldId}/assets/${assetId}/model3d/upload`, { method: "POST", body: formData });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`API POST /worlds/${worldId}/assets/${assetId}/model3d/upload → ${res.status}: ${text}`);
+  }
+  return res.json();
+}
+
+/**
+ * Kick off Blender/CharMorph 3D concept generation for a character asset.
+ * Returns immediately with the asset in model_status "pending" — poll
+ * getModel3DStatus() until it flips to "ready" or "failed".
+ * @param {string} worldId
+ * @param {number} assetId
+ * @returns {{ asset }}
+ */
+export const generateModel3D = (worldId, assetId) =>
+  req("POST", `/worlds/${worldId}/assets/${assetId}/model3d/generate`);
+
+/**
+ * @param {string} worldId
+ * @param {number} assetId
+ * @returns {{ asset }}
+ */
+export const getModel3DStatus = (worldId, assetId) =>
+  req("GET", `/worlds/${worldId}/assets/${assetId}/model3d/status`);
+
+/**
+ * Remove an asset's 3D concept model (deletes the file on disk and clears
+ * the model_* fields). Use this instead of deleting the .glb by hand --
+ * the app has no way to notice a file that disappeared outside of it.
+ * @param {string} worldId
+ * @param {number} assetId
+ * @returns {{ asset }}
+ */
+export const deleteModel3D = (worldId, assetId) =>
+  req("DELETE", `/worlds/${worldId}/assets/${assetId}/model3d`);
+
 // ── Export (Feature 2: assets → Markdown document) ─────────────────────────
 
 /**

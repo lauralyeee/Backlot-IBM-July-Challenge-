@@ -72,3 +72,19 @@ def canon_block(assets: list[dict], query: str, limit: int = 10) -> str:
         for a in relevant
     ]
     return "\n".join(lines)
+
+
+def full_canon_block(assets: list[dict]) -> str:
+    """Render every given asset's FULL content, untruncated, with no
+    relevance filtering -- unlike canon_block() (which retrieves the few
+    entries most relevant to a search query, each cut to 220 chars, for
+    grounding a single generation), this is for jobs that need to reason
+    about the whole canon at once, like the consistency audit. Caller is
+    responsible for capping how many assets it passes in if it needs to
+    stay within a token budget -- this function doesn't truncate on either
+    axis."""
+    lines = [
+        f"[{a['type']} | {a['era']} | {a['faction']}] {a['title']}: {a['content']}"
+        for a in assets
+    ]
+    return "\n".join(lines)

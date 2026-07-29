@@ -2,7 +2,7 @@ import { useState, useMemo, useRef } from "react";
 import { ingestText, ingestFile, commitIngested, updateIngestedAsset } from "../lib/api";
 import { TYPE_META } from "../lib/worldData";
 import { Field, Btn, Chip, Busy, Banner, Tag, EmptyState } from "../components/ui";
-import { IconSpark, IconImport } from "../components/Icons";
+import { IconSpark, IconImport, IconFolder, IconCheck, IconSearch, TypeIcon } from "../components/Icons";
 
 const SAMPLE_SCRIPT = `EXT. THE OUTER HARBOUR — BEFORE DAWN
 
@@ -43,12 +43,12 @@ const FILTERS = [
   { id: "lore", label: "Props & lore" },
 ];
 
-// Left accent bar per type, using the app's existing theme variables rather
-// than a separate palette, so Import matches the rest of the screens.
+// Left accent bar per type -- monochrome, so differentiated by weight
+// rather than hue (the type icon on each card carries the rest).
 const ACCENT = {
-  character: "var(--accent)",
-  location: "var(--teal)",
-  lore: "var(--ok)",
+  character: "var(--text)",
+  location: "var(--text-dim)",
+  lore: "var(--text-faint)",
 };
 
 function StatCard({ label, value, color }) {
@@ -61,7 +61,7 @@ function StatCard({ label, value, color }) {
 }
 
 function ProposalCard({ item, onApprove, onReject, busy }) {
-  const meta = TYPE_META[item.type] || { icon: "📄", label: item.type };
+  const meta = TYPE_META[item.type] || { label: item.type };
   return (
     <div
       className="card fade-in"
@@ -72,7 +72,7 @@ function ProposalCard({ item, onApprove, onReject, busy }) {
     >
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-          <span style={{ fontSize: 17 }}>{meta.icon}</span>
+          <TypeIcon type={item.type} width={15} height={15} style={{ color: "var(--text-dim)" }} />
           <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 16 }}>{item.title}</div>
         </div>
         <span className="badge-proposed">proposed</span>
@@ -202,7 +202,7 @@ export default function Import({ world, addAsset }) {
       {/* ── Left: source document ─────────────────────────────────────── */}
       <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
         <div>
-          <h1 style={{ fontSize: 25, marginBottom: 6 }}>Import</h1>
+          <h1 style={{ fontSize: 28, marginBottom: 6 }}>Import</h1>
           <p style={{ color: "var(--text-dim)", fontSize: 14.5, lineHeight: 1.6 }}>
             Start from something you’ve already written. Paste a script, treatment,
             or outline and it’s broken down into entries you can review one by one.
@@ -312,7 +312,7 @@ export default function Import({ world, addAsset }) {
 
           {!busy && !staged && (
             <EmptyState
-              icon="🗂️"
+              icon={IconFolder}
               title="Nothing extracted yet"
               text="Paste a document on the left and hit Extract. You'll get a list of characters, locations, and props to review before anything is added."
             />
@@ -320,7 +320,7 @@ export default function Import({ world, addAsset }) {
 
           {!busy && staged && proposed.length === 0 && (
             <EmptyState
-              icon={addedCount > 0 ? "✅" : "🔍"}
+              icon={addedCount > 0 ? IconCheck : IconSearch}
               title={addedCount > 0 ? "Review queue clear" : "No new entries found"}
               text={
                 addedCount > 0

@@ -22,20 +22,31 @@ Endpoints:
   POST /api/worlds/{id}/eras/remove    remove an era (optionally merging its assets into another)
   POST /api/worlds/{id}/eras/describe  AI-draft 1-2 sentence descriptions for eras that lack one
   POST /api/worlds/{id}/assets/{aid}/portrait   draft + store a visual portrait prompt/seed for an asset
+  POST /api/worlds/{id}/assets/{aid}/voice/design    draft a voice description + one preview clip (character only)
+  POST /api/worlds/{id}/assets/{aid}/voice/confirm   lock in a previewed voice as this character's permanent voice
+  POST /api/worlds/{id}/assets/{aid}/voice/speak     synthesize reply text in the character's cast voice (MP3)
+  POST /api/worlds/{id}/assets/{aid}/model3d/upload    upload concept media for an asset (3D .glb/.gltf, image, or video)
+  POST /api/worlds/{id}/assets/{aid}/model3d/generate  kick off Blender/CharMorph 3D concept generation (character-only)
+  GET  /api/worlds/{id}/assets/{aid}/model3d/status    poll 3D concept generation status
+  DELETE /api/worlds/{id}/assets/{aid}/model3d         remove an asset's 3D concept model
   GET  /api/ping                       test watsonx connection
   GET  /api/models                     list available foundation models
 """
 
 from __future__ import annotations
 
+import json
 import os
 import random
+import re
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, BackgroundTasks, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from dotenv import load_dotenv
@@ -47,6 +58,8 @@ import retrieval as ret
 import generation as gen
 import ingestion as ing
 import export as exp
+import model3d as m3d
+import voice as vc
 
 # ── App lifecycle ────────────────────────────────────────────────────────────
 
@@ -64,6 +77,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 3D concept models (manual upload + Blender/CharMorph output) are served as
+# static files, never stored as DB blobs -- multi-MB binaries are a bad fit
+# for row storage. Directory is created here so a fresh checkout doesn't need
+# a manual mkdir before the first upload/generation.
+MODELS_DIR = Path(__file__).parent / "static" / "models"
+MODELS_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/models", StaticFiles(directory=str(MODELS_DIR)), name="models")
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -94,6 +115,7 @@ class WorldCreate(BaseModel):
     name: str
     personaId: str
     personaLabel: str
+    description: str = ""          # short world premise, shown to every generation call
     eras: list[str]
     eraNotes: dict = {}            # era name -> 1-2 sentence description
     ideas: list[dict]
@@ -107,6 +129,7 @@ class WorldPatch(BaseModel):
     name: str | None = None
     personaId: str | None = None
     personaLabel: str | None = None
+    description: str | None = None
     eras: list[str] | None = None
     eraNotes: dict | None = None
     ideas: list[dict] | None = None
@@ -118,6 +141,7 @@ class AssetIn(BaseModel):
     id: int
     title: str
     type: str
+    typeLabel: str = ""
     era: str
     faction: str = "—"
     mood: str = "neutral"
@@ -202,6 +226,20 @@ class AssetPatchRequest(BaseModel):
     era: str
     faction: str = "—"
     mood: str = "neutral"
+    typeLabel: str = ""
+
+
+class VoiceDesignRequest(BaseModel):
+    excludeVoiceIds: list[str] = []
+
+
+class VoiceConfirmRequest(BaseModel):
+    voiceId: str
+    voiceDescription: str
+
+
+class VoiceSpeakRequest(BaseModel):
+    text: str
 
 
 # ── Custom persona endpoint ───────────────────────────────────────────────────
@@ -232,10 +270,18 @@ async def generate_custom_persona(body: CustomPersonaRequest):
 
     system_prompt, user_prompt = gen.custom_persona_prompt(description, custom_eras)
     try:
-        # Bumped from the 1000-token default: personaLabel + up to 6 eras + 4
-        # nameIdeas + 2-3 full seed entries (each up to 140 words) can run
-        # close to the old ceiling and get truncated into invalid JSON.
-        text = await wx.generate(system_prompt, user_prompt, max_tokens=1400)
+        # personaLabel + up to 6 eras + 4 nameIdeas + 2-3 full seed entries
+        # (each up to 140 words) can run close to a tight ceiling and get
+        # truncated into invalid JSON -- parse_json() has no partial-repair
+        # path, so a truncated response loses the WHOLE persona (including
+        # the eras/label that already generated fine), not just the seed.
+        # This is the most likely cause of a "custom world came out empty"
+        # report -- the frontend's offline fallback then silently produces
+        # a world with generic eras and zero seed entries. Bumped
+        # 1000 -> 1400 -> 2000 for headroom; if this still truncates with
+        # the fallback model (mistral-medium-2505 tends to be more verbose
+        # than granite), raise it further or trim seed to 2 entries.
+        text = await wx.generate(system_prompt, user_prompt, max_tokens=2000)
         raw = wx.parse_json(text)
 
         persona_label = raw.get("personaLabel")
@@ -256,6 +302,18 @@ async def generate_custom_persona(body: CustomPersonaRequest):
         name_ideas = raw.get("nameIdeas")
         name_ideas = [n for n in name_ideas if isinstance(n, str) and n.strip()] if isinstance(name_ideas, list) else []
 
+        # Starter ideas for the Create screen -- same {label, text} shape as
+        # the built-in PERSONAS.ideas in worldData.js. Silently drop any
+        # malformed entry rather than failing the whole persona over it.
+        raw_ideas = raw.get("ideas") if isinstance(raw.get("ideas"), list) else []
+        ideas = [
+            {"label": i["label"].strip(), "text": i["text"].strip()}
+            for i in raw_ideas
+            if isinstance(i, dict)
+            and isinstance(i.get("label"), str) and i["label"].strip()
+            and isinstance(i.get("text"), str) and i["text"].strip()
+        ][:6]
+
         raw_seed = raw.get("seed") if isinstance(raw.get("seed"), list) else []
         # Normalize every seed entry the same way the main /generate endpoint
         # does, so a missing/invalid field from the model (most often a
@@ -271,6 +329,7 @@ async def generate_custom_persona(body: CustomPersonaRequest):
             "personaLabel": persona_label,
             "eras": eras,
             "nameIdeas": name_ideas,
+            "ideas": ideas,
             "seed": seed,
         }
     except Exception as exc:
@@ -806,6 +865,311 @@ async def generate_portrait(world_id: str, asset_id: int):
     return result
 
 
+# ── AI-cast character voice (Gemini TTS) ─────────────────────────────────────
+
+# Mirrors the portrait "art director" pattern above: Granite drafts a short
+# voice description AND a gender read from the character's canon sheet, then
+# that's matched against Gemini TTS's 30 fixed prebuilt voices (see
+# voice.py's VOICE_POOL and module docstring for the full migration story
+# and gender-mapping caveat -- migrated 2026-07-28 from ElevenLabs, whose
+# free tier turned out to blanket-restrict any library/community voice via
+# API regardless of selection mechanism). Gender is applied as a hard
+# filter before the softer keyword scoring, same shape as before, so an
+# explicit trait like "female" can't get outvoted by other matched words.
+# IMPORTANT DIFFERENCE FROM THE OLD ELEVENLABS SHAPE: Gemini's fixed voices
+# don't carry accent/tone themselves -- the character's voice_description
+# has to be re-sent as prompt-time style direction on every synthesize()
+# call, not just at casting time, so /voice/speak below passes
+# asset["voiceDescription"] through, not just the voice id. Casting never
+# touches the asset row until /voice/confirm -- clicking "regenerate" on
+# the frontend just costs another design call (excluding voices already
+# shown this session), the same way the portrait repaint button costs
+# nothing but another seed. Once confirmed, the saved voice_id (a Gemini
+# voice name, e.g. "Kore") and voice_description are both reused for every
+# future chat reply via /voice/speak.
+
+def _voice_description_prompt(asset: dict) -> str:
+    return (
+        f"Character: {asset['title']}\n"
+        f"Type: {asset['type']}  Faction: {asset['faction']}  Mood: {asset['mood']}\n"
+        f"Canon entry: {asset['content']}"
+    )
+
+
+@app.post("/api/worlds/{world_id}/assets/{asset_id}/voice/design")
+async def design_character_voice(world_id: str, asset_id: int, body: VoiceDesignRequest = VoiceDesignRequest()):
+    """Draft an accent + tone/pace description and gender read via Granite
+    (accent is asked for separately from tone/pace and stated first in the
+    final description, so it can't get diluted into a hedged blend when a
+    character's origin differs from where they currently live -- see the
+    prompt below), then pick a matching fixed Gemini TTS voice (gender
+    hard-filtered first) and synthesize one preview line steered by that
+    description. Nothing is persisted here -- call again (excluding voices
+    already seen via body.excludeVoiceIds) for a fresh take, or POST
+    .../voice/confirm once you like what you hear."""
+    _require_world(world_id)
+    asset = db.get_asset(asset_id)
+    if not asset or asset.get("worldId") != world_id:
+        raise HTTPException(404, "Asset not found")
+
+    offline = False
+    try:
+        text = await wx.generate(
+            "You are a voice director casting a narrator's read of a character "
+            "for an audiobook. Read the canon entry and decide how this "
+            "character would actually sound speaking aloud, then output a "
+            "single JSON object and nothing else -- no explanation, no "
+            "markdown. Keys: \"accent\" (2-6 words naming ONE primary accent, "
+            "e.g. \"American, New York\" or \"Russian\" -- if the canon entry "
+            "describes where this character is originally from/grew up versus "
+            "where they currently live, their native/formative accent should "
+            "DOMINATE: a lifelong accent doesn't vanish just because someone "
+            "moved somewhere new. Only name a blended/softened/changed accent "
+            "if the canon entry explicitly says their accent has changed over "
+            "time -- otherwise pick the ONE accent their upbringing implies "
+            "and state it plainly, don't hedge between two), \"description\" "
+            "(a 15-40 word voice description covering apparent age, tone, and "
+            "pace only -- do NOT restate the accent here, that's the "
+            "\"accent\" key's job, and do not repeat the gender word itself, "
+            "just how they sound), \"gender\" (exactly one of: male, female, "
+            "neutral -- your best read of how this character's voice would be "
+            "gendered; use neutral only if the canon entry gives genuinely no "
+            "indication either way). Begin your response with { and end with }.",
+            _voice_description_prompt(asset),
+            max_tokens=140,
+        )
+        parsed = wx.parse_json(text)
+        accent = " ".join(str(parsed.get("accent", "")).replace('"', "").split()).strip()[:60]
+        tone_desc = " ".join(str(parsed.get("description", "")).replace('"', "").split()).strip()
+        gender = str(parsed.get("gender", "")).strip().lower()
+        if gender not in ("male", "female", "neutral"):
+            gender = "neutral"
+        if len(tone_desc) < 10:
+            raise RuntimeError("voice description came back empty/too short")
+        # Accent stated first and plainly (matches Gemini TTS's own
+        # documented "Accent: ..." director's-note style) rather than folded
+        # into a hedged, blended sentence -- a real bug this fixed: a
+        # character described in canon as "American, moved to London" was
+        # coming out sounding mostly British because the old single-field
+        # prompt let the model hedge/blend the two instead of committing to
+        # the character's actual formative accent.
+        description = (f"Accent: {accent}. {tone_desc}" if accent else tone_desc)[:400]
+    except Exception:
+        # Offline fallback: a serviceable literal description straight from
+        # the asset's own fields -- less characterful, still a valid cast.
+        # Gender can't be inferred without a model call, so guess from
+        # pronoun counts in the canon text itself; ties or no pronouns at
+        # all fall back to "neutral" (no hard filter applied).
+        offline = True
+        description = (
+            f"A {asset['mood']} voice fitting a {asset['type']} associated with "
+            f"{asset['faction']}, speaking in a natural, consistent register."
+        )
+        canon_lower = (asset.get("content") or "").lower()
+        she_count = len(re.findall(r"\bshe\b|\bher\b|\bhers\b", canon_lower))
+        he_count = len(re.findall(r"\bhe\b|\bhim\b|\bhis\b", canon_lower))
+        if she_count > he_count:
+            gender = "female"
+        elif he_count > she_count:
+            gender = "male"
+        else:
+            gender = "neutral"
+
+    try:
+        preview = await vc.cast_voice_preview(
+            description,
+            body.excludeVoiceIds,
+            f"Hello, I'm {asset['title']}.",
+            gender if gender != "neutral" else None,
+        )
+    except Exception as exc:
+        # Printed (not just returned in the 503 body) so it shows up in the
+        # uvicorn terminal directly -- avoids needing to dig into browser
+        # DevTools' Network tab to see the real Gemini TTS error.
+        print(f"[voice/design] failed: {exc}")
+        raise HTTPException(503, f"Voice preview unavailable right now: {exc}")
+
+    result = {
+        "voiceDescription": description,
+        "voiceId": preview["voiceId"],
+        "voiceName": preview["voiceName"],
+        "audioBase64": preview["audioBase64"],
+    }
+    if offline:
+        result["offline"] = True
+    return result
+
+
+@app.post("/api/worlds/{world_id}/assets/{asset_id}/voice/confirm")
+async def confirm_character_voice(world_id: str, asset_id: int, body: VoiceConfirmRequest):
+    """Lock in a previewed fixed voice + its style description as this
+    character's permanent voice -- every future chat reply for them reuses
+    both this voice_id (a Gemini voice name) and voiceDescription from here
+    on. No external call needed at confirm time: nothing is created,
+    Gemini's voices are fixed and always available."""
+    _require_world(world_id)
+    asset = db.get_asset(asset_id)
+    if not asset or asset.get("worldId") != world_id:
+        raise HTTPException(404, "Asset not found")
+
+    saved = db.update_asset(
+        asset_id, {"voice_id": body.voiceId, "voice_description": body.voiceDescription}
+    )
+    return {"asset": saved}
+
+
+@app.post("/api/worlds/{world_id}/assets/{asset_id}/voice/speak")
+async def speak_as_character(world_id: str, asset_id: int, body: VoiceSpeakRequest):
+    """Synthesize `text` in this character's already-cast voice. Returns a
+    playable WAV file on success. Any failure here -- no voice cast yet,
+    Gemini quota exhausted, network error -- raises so the frontend's fetch
+    sees a non-OK response and falls back to Web Speech instead of the
+    reply just going silent."""
+    _require_world(world_id)
+    asset = db.get_asset(asset_id)
+    if not asset or asset.get("worldId") != world_id:
+        raise HTTPException(404, "Asset not found")
+    voice_id = asset.get("voiceId")
+    if not voice_id:
+        raise HTTPException(409, "No voice has been cast for this character yet")
+    # Gemini's fixed voices need the style description re-sent on every
+    # call (see voice.py's module docstring) -- unlike the old ElevenLabs
+    # shape, the voice_id alone isn't enough to sound like this character.
+    voice_description = asset.get("voiceDescription") or ""
+
+    try:
+        audio = await vc.synthesize(voice_id, voice_description, body.text)
+    except Exception as exc:
+        print(f"[voice/speak] failed: {exc}")
+        raise HTTPException(503, f"Voice playback unavailable right now: {exc}")
+
+    return Response(content=audio, media_type="audio/wav")
+
+
+# ── 3D concept model (manual upload + Blender/CharMorph generation) ─────────
+
+# Storage: unlike the portrait system above (zero storage -- Pollinations
+# URLs are reconstructed deterministically), a 3D model is a real binary file
+# that must be persisted. It lives on disk under MODELS_DIR and is served via
+# the /models static mount registered above; the DB only stores the served
+# path + status/provenance, never the file bytes.
+
+MODEL3D_EXTS = {".glb", ".gltf"}
+IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+VIDEO_EXTS = {".mp4", ".webm", ".mov"}
+CONCEPT_MEDIA_EXTS = MODEL3D_EXTS | IMAGE_EXTS | VIDEO_EXTS
+
+
+def _concept_media_kind(ext: str) -> str | None:
+    """Classify an uploaded file's extension into the Gallery's three
+    concept-media kinds, or None if it isn't one we accept."""
+    if ext in MODEL3D_EXTS:
+        return "3d"
+    if ext in IMAGE_EXTS:
+        return "image"
+    if ext in VIDEO_EXTS:
+        return "video"
+    return None
+
+
+@app.post("/api/worlds/{world_id}/assets/{asset_id}/model3d/upload")
+async def upload_model3d(world_id: str, asset_id: int, file: UploadFile = File(...)):
+    """Manual import path: upload a pre-made 3D model (.glb/.gltf), a
+    concept-art image, or a short video as an asset's concept media. Works
+    for any asset type (not just characters) -- images and video are the
+    only option for lore/location/event/other entries, which have no 3D
+    generation path, and both remain available for characters too alongside
+    Blender/CharMorph generation."""
+    _require_world(world_id)
+    asset = db.get_asset(asset_id)
+    if not asset or asset.get("worldId") != world_id:
+        raise HTTPException(404, "Asset not found in this world")
+
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    kind = _concept_media_kind(ext)
+    if kind is None:
+        supported = ", ".join(sorted(CONCEPT_MEDIA_EXTS))
+        raise HTTPException(400, f"Unsupported file type '{ext or 'unknown'}' — supported: {supported}")
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "Uploaded file is empty")
+
+    # Clear out any previously stored file for this asset, regardless of its
+    # extension (e.g. swapping an uploaded .glb for a .mp4) -- otherwise the
+    # old file lingers orphaned on disk once the DB row points at the new one.
+    for existing in MODELS_DIR.glob(f"{asset_id}.*"):
+        existing.unlink()
+
+    dest = MODELS_DIR / f"{asset_id}{ext}"
+    dest.write_bytes(data)
+
+    saved = db.update_asset(asset_id, {
+        "model_path": f"/models/{asset_id}{ext}",
+        "model_source": "manual",
+        "model_status": "ready",
+        "model_error": None,
+        "model_added_at": int(time.time() * 1000),
+        "model_kind": kind,
+    })
+    return {"asset": saved}
+
+
+@app.post("/api/worlds/{world_id}/assets/{asset_id}/model3d/generate")
+async def generate_model3d(world_id: str, asset_id: int, background_tasks: BackgroundTasks):
+    """Kick off the Granite -> Blender -> CharMorph pipeline for a character.
+    Generation takes real time (not instant like the portrait endpoint), so
+    this returns immediately with model_status="pending" and does the actual
+    work in a background task; the frontend polls the status endpoint below."""
+    _require_world(world_id)
+    asset = db.get_asset(asset_id)
+    if not asset or asset.get("worldId") != world_id:
+        raise HTTPException(404, "Asset not found in this world")
+    if asset.get("type") != "character":
+        raise HTTPException(400, "3D concept generation is only available for character assets")
+
+    saved = db.update_asset(asset_id, {"model_status": "pending", "model_error": None})
+    background_tasks.add_task(m3d.generate_and_store, asset_id, asset)
+    return {"asset": saved}
+
+
+@app.get("/api/worlds/{world_id}/assets/{asset_id}/model3d/status")
+def model3d_status(world_id: str, asset_id: int):
+    _require_world(world_id)
+    asset = db.get_asset(asset_id)
+    if not asset or asset.get("worldId") != world_id:
+        raise HTTPException(404, "Asset not found in this world")
+    return {"asset": asset}
+
+
+@app.delete("/api/worlds/{world_id}/assets/{asset_id}/model3d")
+def delete_model3d(world_id: str, asset_id: int):
+    """Remove an asset's concept media (3D model, image, or video) --
+    deletes the file on disk (if present) and clears the model_* fields on
+    the asset row. Exists so "delete" is something the app tracks, instead
+    of deleting the file by hand on disk (which the DB never finds out
+    about, so the Gallery keeps showing it as if it still exists). Globs by
+    asset id rather than assuming a .glb extension, since the stored file
+    can now be any of the accepted concept-media formats."""
+    _require_world(world_id)
+    asset = db.get_asset(asset_id)
+    if not asset or asset.get("worldId") != world_id:
+        raise HTTPException(404, "Asset not found in this world")
+
+    for existing in MODELS_DIR.glob(f"{asset_id}.*"):
+        existing.unlink()
+
+    saved = db.update_asset(asset_id, {
+        "model_path": None,
+        "model_source": None,
+        "model_status": None,
+        "model_error": None,
+        "model_added_at": None,
+        "model_kind": None,
+    })
+    return {"asset": saved}
+
+
 # ── Generation endpoint ───────────────────────────────────────────────────────
 
 @app.post("/api/worlds/{world_id}/generate")
@@ -846,7 +1210,8 @@ async def generate_asset(world_id: str, body: GenerateRequest):
             f"{gen.timeline_block(world)}\n\n"
             f"ESTABLISHED CANON (retrieved as most relevant to this request):\n"
             f"{ret.canon_block(assets, query)}\n\n"
-            f"{gen.schema_for(world)} The \"era\" must be \"{era}\"."
+            f"{gen.schema_for(world, title_style=('character' if subject['type'] == 'character' else None))} "
+            f"The \"era\" must be \"{era}\" and the \"type\" must be \"{subject['type']}\"."
         )
         user_prompt = (
             f"{time_line}"
@@ -860,7 +1225,10 @@ async def generate_asset(world_id: str, body: GenerateRequest):
             "who and where they actually were then, not their later self transplanted); "
             "in a LATER era they are older by that gap — promoted, weathered, retired, "
             "or gone. Never carry a subject's age, rank, or posting across eras "
-            "unchanged unless the timeline implies no meaningful time passes.\n"
+            "unchanged unless the timeline implies no meaningful time passes. "
+            "This is the exact same entry re-imagined for a different era, not a new "
+            "one -- its name/title and type must stay exactly as given below; only "
+            "its situation, appearance, role, and content change.\n"
             f"[{subject['type']}] {subject['title']}: {subject['content']}"
         )
         force_type = subject["type"]
@@ -897,7 +1265,7 @@ async def generate_asset(world_id: str, body: GenerateRequest):
             f"{gen.persona_system(world)}\n\n"
             f"ESTABLISHED CANON (retrieved as most relevant to this request):\n"
             f"{ret.canon_block(assets, query)}\n\n"
-            f"{gen.schema_for(world)} The \"type\" must be \"character\"."
+            f"{gen.schema_for(world, title_style='character')} The \"type\" must be \"character\"."
         )
         if fragment:
             user_prompt = (
@@ -935,14 +1303,37 @@ async def generate_asset(world_id: str, body: GenerateRequest):
     try:
         text = await wx.generate(system_prompt, user_prompt)
         raw = wx.parse_json(text)
+        # A malformed/truncated model response can come back with an empty or
+        # missing title/content -- normalize_asset() would silently paper over
+        # that with "Untitled entry" / "No description was returned." and this
+        # would still be treated as success. Fail loudly instead so it falls
+        # through to the offline-fallback path below, which surfaces the real
+        # error to the user instead of saving a fake entry.
+        if not (isinstance(raw.get("title"), str) and raw.get("title").strip()) or \
+           not (isinstance(raw.get("content"), str) and raw.get("content").strip()):
+            raise RuntimeError("model returned an incomplete entry (missing title/content)")
         asset = gen.normalize_asset(raw, world, force_type)
 
-        # Tier 2: auto-tagging — run a lightweight second-pass classification
-        asset = await _auto_tag(asset, world, assets)
+        # Tier 2: auto-tagging — run a lightweight second-pass classification.
+        # era_shift locks the type so this pass can't quietly reclassify an
+        # entry that's being re-rendered, not reinvented.
+        asset = await _auto_tag(asset, world, assets, lock_type=(mode == "era_shift"))
 
         if mode == "era_shift":
             if body.era:
                 asset["era"] = body.era
+            # Identity lock: era-shifting must never change WHAT the entry is
+            # or WHO a character is -- only how they appear/are situated in
+            # this era. Discard whatever type/title the model (or the
+            # auto-tagger above) returned; small models don't reliably follow
+            # this instruction from the prompt alone (same reasoning as the
+            # server-computed TIME DIRECTION above), so it's enforced here
+            # unconditionally instead of just requested.
+            asset["type"] = subject["type"]
+            if subject["type"] == "character":
+                asset["title"] = subject["title"]
+            if subject["type"] == "other":
+                asset["typeLabel"] = subject.get("typeLabel", "")
             asset["source_asset_id"] = subject["id"]
             existing = db.find_asset_by_source(world_id, subject["id"], asset["era"])
             if existing:
@@ -991,9 +1382,18 @@ async def generate_asset(world_id: str, body: GenerateRequest):
                 "a new figure connected to this world" if mode == "character" else (body.fragment or "new entry"),
                 world, assets,
                 force_type,
+                subject.get("typeLabel", "") if mode == "era_shift" and subject.get("type") == "other" else None,
             )
         )
         if mode == "era_shift":
+            # Same identity lock as the online path above -- an offline draft
+            # must not split a character into two differently-named entries
+            # either.
+            fallback["type"] = subject["type"]
+            if subject["type"] == "character":
+                fallback["title"] = subject["title"]
+            if subject["type"] == "other":
+                fallback["typeLabel"] = subject.get("typeLabel", "")
             fallback["source_asset_id"] = subject["id"]
             existing = db.find_asset_by_source(world_id, subject["id"], fallback["era"])
             if existing:
@@ -1012,13 +1412,17 @@ async def generate_asset(world_id: str, body: GenerateRequest):
 
 # ── Tier 2: Auto-tagging ─────────────────────────────────────────────────────
 
-async def _auto_tag(asset: dict, world: dict, assets: list[dict]) -> dict:
+async def _auto_tag(asset: dict, world: dict, assets: list[dict], lock_type: bool = False) -> dict:
     """Run a second lightweight classification pass to assign/verify tags.
 
     Strategy: attempt a cheap model call with a short tagging prompt.
     If it fails for any reason (quota, timeout, etc.) fall back silently to
     the tags already embedded in the generation response — this is a best-
     effort enrichment step, not a hard requirement.
+
+    lock_type=True means the caller already knows the correct type from
+    context (era-shift, where type must match the source entry) -- this
+    pass then may not reclassify it.
     """
     from generation import TYPES
     eras = world.get("eras", [])
@@ -1037,7 +1441,7 @@ async def _auto_tag(asset: dict, world: dict, assets: list[dict]) -> dict:
     try:
         raw_tags = await wx.generate("", tag_prompt)
         tags = wx.parse_json(raw_tags)
-        if tags.get("type") in TYPES:
+        if not lock_type and tags.get("type") in TYPES:
             asset["type"] = tags["type"]
         if tags.get("era") in eras:
             asset["era"] = tags["era"]
@@ -1053,26 +1457,90 @@ async def _auto_tag(asset: dict, world: dict, assets: list[dict]) -> dict:
 
 # ── Consistency audit ────────────────────────────────────────────────────────
 
+# Consistency check: how many of a world's most-recently-created assets
+# get sent to the model. Every included asset's FULL content is sent,
+# untruncated -- unlike normal generation grounding (which retrieves only
+# a few entries relevant to one query and truncates each), this needs the
+# whole canon at once to actually find cross-entry contradictions. The
+# cap exists only to keep the prompt inside a safe token budget for very
+# large worlds; when it bites, the response says so (`skipped`) instead
+# of silently acting like coverage was complete.
+_AUDIT_ASSET_LIMIT = 60
+
+
 @app.post("/api/worlds/{world_id}/audit")
 async def audit_world(world_id: str):
     world = _require_world(world_id)
     assets = db.list_assets(world_id)
 
+    audited = assets[-_AUDIT_ASSET_LIMIT:] if len(assets) > _AUDIT_ASSET_LIMIT else assets
+    skipped = max(0, len(assets) - len(audited))
+
     try:
+        system = f"{gen.persona_system(world)} You are running a canon consistency audit."
+        canon = ret.full_canon_block(audited)
+
         text = await wx.generate(
-            f"{gen.persona_system(world)} You are running a canon consistency audit.",
+            system,
             (
-                "Audit this canon for internal contradictions. "
-                "Respond ONLY with JSON: "
-                "{\"issues\": [{\"severity\": \"high\"|\"low\", \"entries\": [\"title A\", \"title B\"], "
-                "\"issue\": \"one plain-language sentence\"}]}. "
+                "Read this world's ENTIRE canon below, in full. Find genuine internal "
+                "contradictions (facts that can't both be true) and cross-type name "
+                "collisions (two different entries -- of different types -- sharing the "
+                "same or a near-identical name, which makes them hard to tell apart "
+                "elsewhere in the app). Only flag something you can point to specific "
+                "text for -- do not invent or guess at issues the text doesn't actually "
+                "support.\n"
+                "Respond ONLY with JSON: {\"issues\": [{\"severity\": \"high\"|\"low\", "
+                "\"entries\": [\"title A\", \"title B\"], \"issue\": \"one plain-language "
+                "sentence\", \"evidence\": \"a short quote or close paraphrase from each "
+                "entry that supports this\"}]}. "
                 "If nothing conflicts, return {\"issues\": []}.\n\n"
-                f"CANON:\n{ret.canon_block(assets, '', 30)}"
+                f"CANON:\n{canon}"
             ),
+            max_tokens=1200,
         )
         parsed = wx.parse_json(text)
-        issues = parsed.get("issues") if isinstance(parsed.get("issues"), list) else []
-        return {"issues": issues}
+        candidates = parsed.get("issues") if isinstance(parsed.get("issues"), list) else []
+
+        # Verification pass: this app has repeatedly found that a single
+        # unverified call from these models isn't trustworthy for
+        # open-ended judgment calls (see era-shift temporal reasoning and
+        # character-identity fixes elsewhere in this file) -- so before
+        # anything is shown to the user, ask the model to re-check its own
+        # candidate issues against the full canon and drop whatever isn't
+        # actually supported. If this second call fails, fall back to the
+        # unverified candidates rather than losing the audit entirely.
+        issues = candidates
+        if candidates:
+            try:
+                verify_text = await wx.generate(
+                    system,
+                    (
+                        "You proposed these possible canon issues for this world. "
+                        "Re-check EACH one carefully against the full canon below -- you "
+                        "sometimes flag things the text doesn't actually support, so be "
+                        "skeptical of your own prior answer. Drop any issue that isn't "
+                        "clearly and specifically backed by the text, and make sure "
+                        "\"evidence\" genuinely quotes or closely paraphrases the actual "
+                        "entries.\n"
+                        f"YOUR PROPOSED ISSUES:\n{json.dumps(candidates)}\n\n"
+                        f"CANON:\n{canon}\n\n"
+                        "Respond ONLY with the same JSON shape, containing only the "
+                        "confirmed issues: {\"issues\": [...]}."
+                    ),
+                    max_tokens=1200,
+                )
+                verify_parsed = wx.parse_json(verify_text)
+                verified = verify_parsed.get("issues")
+                if isinstance(verified, list):
+                    issues = verified
+            except Exception:
+                pass
+
+        result: dict = {"issues": issues}
+        if skipped:
+            result["skipped"] = skipped
+        return result
     except Exception as exc:
         result = gen.offline_audit(assets)
         result["error"] = str(exc)
@@ -1171,9 +1639,14 @@ async def ask(world_id: str, body: AskRequest):
             if not char:
                 raise HTTPException(404, "Character asset not found")
 
+            premise = gen.premise_block(world)
             system_prompt = (
                 f"You are {char['title']} in the world \"{world['name']}\". "
                 f"Character: {char['content']} ({char['era']}, {char['faction']}, {char['mood']}). "
+                + (f"{premise} " if premise else "")
+                + "You know about your world in general, not just your own entry -- if asked "
+                "about the world itself, answer in character using what a person like you would "
+                "plausibly know. "
                 "Stay in character, consistent with canon. Reply in 1-3 sentences of dialogue only — "
                 "no stage directions, no narration, no restating these instructions.\n\n"
                 f"CANON:\n{ret.canon_block(assets, char['title'])}"

@@ -1,13 +1,24 @@
 /* ============================================================
-   Dialect & Voice module (stretch goal, section 9.7).
-   Uses the browser's built-in Web Speech API (no external TTS
-   key needed for a POC). Each faction gets a deterministic
-   pitch/rate "accent" derived from its dialect profile, and a
-   consistently-assigned system voice, so the same faction always
-   sounds the same across the session.
+   Dialect & Voice module.
+   Two tiers: an AI-cast voice per character (Gemini TTS, via the
+   backend -- see speakAsCharacterOrFallback() below) when one has
+   been cast, and the browser's built-in Web Speech API otherwise
+   or if the AI voice is unavailable for any reason (no cast yet,
+   Gemini quota exhausted, network error). Web Speech needs no
+   external key, so it's always the safety net -- speak()/
+   speakAsCharacterOrFallback() never just go silent.
+   Each faction also gets a deterministic pitch/rate "accent"
+   derived from its dialect profile, and a consistently-assigned
+   system voice, so the same faction always sounds the same across
+   the session on the Web Speech path.
    ============================================================ */
 
+import { speakAsCharacter } from "./api";
+
 let cachedVoices = [];
+// The currently-playing AI-voice <audio> element, if any -- tracked so
+// stopSpeaking() can stop it the same way it cancels Web Speech.
+let currentAudio = null;
 if (typeof window !== "undefined" && "speechSynthesis" in window) {
   const load = () => { cachedVoices = window.speechSynthesis.getVoices(); };
   load();
@@ -52,42 +63,39 @@ export function speak(text, faction, dialectProfiles, handlers = {}) {
 }
 
 export function stopSpeaking() {
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio = null;
+  }
   if (voiceSupported()) window.speechSynthesis.cancel();
 }
 
-/* ── Voice input (speech-to-text) ─────────────────────────────────────
-   Same Web Speech API family as speech synthesis above, so still no
-   external service or key. Supported in Chrome/Edge/Safari; NOT in
-   Firefox — callers must gate the UI on recognitionSupported(). */
-
-export function recognitionSupported() {
-  return (
-    typeof window !== "undefined" &&
-    ("SpeechRecognition" in window || "webkitSpeechRecognition" in window)
-  );
-}
-
-/** Start one-shot speech recognition. Returns the recognition instance so
- *  the caller can .stop() it early, or null if unsupported.
- *  handlers: { onResult(transcript), onError(err), onEnd() } — onEnd fires
- *  after both success and error, so UI "listening" state resets reliably. */
-export function startListening({ onResult, onError, onEnd } = {}) {
-  const SR = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
-  if (!SR) {
-    onError?.(new Error("Speech recognition is not supported in this browser"));
-    onEnd?.();
-    return null;
+/** Speak `text` as `asset` (a character): if asset.voiceId is set (a voice
+ *  has been cast for them), plays it back via the backend's Gemini TTS
+ *  synthesis; on any failure there -- or if no voice has been cast yet --
+ *  falls straight back to speak() (Web Speech), so a reply is never just
+ *  silent. handlers: same {onStart, onEnd} shape as speak(). */
+export async function speakAsCharacterOrFallback(worldId, asset, text, dialectProfiles, handlers = {}) {
+  stopSpeaking();
+  if (asset?.voiceId) {
+    try {
+      const url = await speakAsCharacter(worldId, asset.id, text);
+      const audio = new Audio(url);
+      currentAudio = audio;
+      const cleanup = () => {
+        if (currentAudio === audio) currentAudio = null;
+        URL.revokeObjectURL(url);
+        handlers.onEnd?.();
+      };
+      audio.onplay = () => handlers.onStart?.();
+      audio.onended = cleanup;
+      audio.onerror = cleanup;
+      await audio.play();
+      return;
+    } catch (_e) {
+      // AI voice unavailable right now (no cast yet, quota exhausted,
+      // network error) -- fall through to the Web Speech path below.
+    }
   }
-  const rec = new SR();
-  rec.lang = "en-US";
-  rec.interimResults = false;
-  rec.maxAlternatives = 1;
-  rec.onresult = (ev) => {
-    const transcript = ev.results?.[0]?.[0]?.transcript;
-    if (transcript) onResult?.(transcript);
-  };
-  rec.onerror = (ev) => onError?.(new Error(ev.error || "speech recognition error"));
-  rec.onend = () => onEnd?.();
-  rec.start();
-  return rec;
+  speak(text, asset?.faction, dialectProfiles, handlers);
 }

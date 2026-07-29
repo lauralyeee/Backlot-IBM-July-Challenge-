@@ -1,8 +1,12 @@
 import { TYPE_META } from "../lib/worldData";
 import { Tag } from "./ui";
+import { TypeIcon } from "./Icons";
 
 export default function AssetCard({ asset, onClick, compact }) {
-  const meta = TYPE_META[asset.type] || { icon: "📄", label: asset.type };
+  const meta = TYPE_META[asset.type] || { label: asset.type };
+  // "other"-typed entries carry their own AI- (or writer-) assigned label
+  // (e.g. "Faction", "Clan") instead of the generic "Other" bucket name.
+  const typeLabel = asset.type === "other" && asset.typeLabel ? asset.typeLabel : meta.label;
   return (
     <div
       className={`card ${onClick ? "card-hover" : ""} fade-in`}
@@ -11,7 +15,7 @@ export default function AssetCard({ asset, onClick, compact }) {
     >
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-          <span style={{ fontSize: 18 }}>{meta.icon}</span>
+          <TypeIcon type={asset.type} width={16} height={16} style={{ color: "var(--text-dim)", flexShrink: 0 }} />
           <div style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 16.5, lineHeight: 1.3 }}>{asset.title}</div>
         </div>
         {asset.offline && <span className="badge-offline">offline draft</span>}
@@ -22,7 +26,7 @@ export default function AssetCard({ asset, onClick, compact }) {
         </p>
       )}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: "auto" }}>
-        <Tag>{meta.label}</Tag>
+        <Tag>{typeLabel}</Tag>
         <Tag>{asset.era}</Tag>
         {asset.faction !== "—" && <Tag>{asset.faction}</Tag>}
         <Tag>{asset.mood}</Tag>

@@ -1,28 +1,17 @@
 import { useState, useEffect, useCallback } from "react";
 import { ROLES } from "./lib/worldData";
-import { createWorld, getWorld, patchWorld, listAssets, saveAsset, deleteAsset } from "./lib/api";
+import { createWorld, getWorld, patchWorld, listAssets, saveAsset, deleteAsset, describeEras } from "./lib/api";
 import Sidebar from "./components/Sidebar";
-import TopBar from "./components/TopBar";
 import Onboarding from "./screens/Onboarding";
 import Home from "./screens/Home";
 import WorldBook from "./screens/WorldBook";
+import Gallery from "./screens/Gallery";
 import Create from "./screens/Create";
 import Characters from "./screens/Characters";
 import Timeline from "./screens/Timeline";
 import Settings from "./screens/Settings";
 import Import from "./screens/Import";
 import Export from "./screens/Export";
-
-const TITLES = {
-  home: ["Home", "Where to start"],
-  canon: ["World Book", "Everything true about your world"],
-  create: ["Add to World", "Gap-Filling Engine"],
-  characters: ["Characters", "NPC Cast Generator & chat"],
-  timeline: ["Timeline", "Time-Shift Mode"],
-  settings: ["Settings", "Your world, your rules"],
-  import: ["Import", "Bring in world data"],
-  export: ["Export", "Take your world data out"],
-};
 
 // Persist world-id + ui mode in localStorage (non-sensitive, no credentials)
 const UI_KEY = "worldbuilding-copilot:ui:v2";
@@ -88,7 +77,7 @@ export default function App() {
     setAssets((prev) => prev.filter((a) => a.id !== assetId));
   }, []);
 
-  // Called by Settings when world metadata changes
+  // Called by Settings and Timeline when world metadata changes
   const handleSetWorld = useCallback(async (updated) => {
     const { rolesFull: _, ...rest } = updated;
     try {
@@ -100,7 +89,7 @@ export default function App() {
     }
   }, []);
 
-  // Called by Settings after an era rename/remove, which already persisted
+  // Called by Timeline after an era rename/remove, which already persisted
   // via its own dedicated endpoint (not patchWorld) — this just syncs the
   // authoritative world object the endpoint returned into local state,
   // without issuing a second, redundant PATCH.
@@ -108,7 +97,7 @@ export default function App() {
     setWorld({ ...updated, rolesFull: ROLES.filter((r) => updated.roles.includes(r.id)) });
   }, []);
 
-  // Called by Settings after an era rename/remove that reassigned assets —
+  // Called by Timeline after an era rename/remove that reassigned assets —
   // those assets' era field changed server-side, so the locally-held assets
   // list needs a refetch to stay in sync.
   const refreshAssets = useCallback(async () => {
@@ -146,6 +135,7 @@ export default function App() {
               name: w.name,
               personaId: w.personaId,
               personaLabel: w.personaLabel,
+              description: w.description || "",
               eras: w.eras,
               ideas: w.ideas,
               dialects: w.dialects || {},
@@ -157,8 +147,19 @@ export default function App() {
                 createdAt: Date.now() - (w.seed.length - i) * 1000,
               })),
             };
-            const created = await createWorld(worldData);
+            let created = await createWorld(worldData);
             const seedAssets = await listAssets(id);
+            // Best-effort: auto-draft descriptions for any era that doesn't
+            // have one yet, so a brand-new world's timeline isn't just bare
+            // names -- describeEras() already no-ops cleanly if every era
+            // is described, and never throws past its own try/except, so
+            // this can't block getting into the world on failure.
+            try {
+              const described = await describeEras(id);
+              if (described && described.world) created = described.world;
+            } catch {
+              // Non-fatal — eras stay undescribed, refinable later from Timeline.
+            }
             setWorld({ ...created, rolesFull: ROLES.filter((r) => created.roles.includes(r.id)) });
             setAssets(seedAssets);
             setWorldId(id);
@@ -171,27 +172,24 @@ export default function App() {
   }
 
   const worldFull = { ...world, rolesFull: ROLES.filter((r) => world.roles.includes(r.id)) };
-  const [title, subtitle] = TITLES[tab];
 
   return (
     <div className="app-shell">
-      <Sidebar tab={tab} setTab={setTab} world={world} assetCount={assets.length} />
+      <Sidebar tab={tab} setTab={setTab} world={world} assetCount={assets.length} mode={mode} toggleTheme={toggleTheme} />
       <div className="main-col">
-        <TopBar title={title} subtitle={subtitle} mode={mode} toggleTheme={toggleTheme} />
         <div className="content">
           {tab === "home" && <Home world={worldFull} assets={assets} setTab={setTab} />}
           {tab === "canon" && <WorldBook world={worldFull} assets={assets} setTab={setTab} removeAsset={removeAsset} addAsset={addAsset} />}
+          {tab === "gallery" && <Gallery world={worldFull} assets={assets} addAsset={addAsset} />}
           {tab === "create" && <Create world={worldFull} assets={assets} addAsset={addAsset} />}
           {tab === "characters" && <Characters world={worldFull} assets={assets} addAsset={addAsset} />}
-          {tab === "timeline" && <Timeline world={worldFull} assets={assets} addAsset={addAsset} />}
+          {tab === "timeline" && <Timeline world={worldFull} assets={assets} addAsset={addAsset} setWorld={handleSetWorld} onWorldUpdated={applyWorldUpdate} refreshAssets={refreshAssets} />}
           {tab === "import" && <Import world={worldFull} addAsset={addAsset} />}
           {tab === "export" && <Export world={worldFull} assets={assets} />}
           {tab === "settings" && (
             <Settings
               world={world}
               setWorld={handleSetWorld}
-              onWorldUpdated={applyWorldUpdate}
-              refreshAssets={refreshAssets}
               mode={mode}
               toggleTheme={toggleTheme}
               onReset={handleReset}

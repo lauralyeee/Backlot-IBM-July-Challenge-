@@ -42,7 +42,7 @@ _DOC_LABELS: dict[str, str] = {
 _PITCH_CAP: dict[str, int] = {
     "character": 8,
     "location": 6,
-    "faction": 999,   # typically few — take all
+    "other": 999,     # factions/clans/etc. -- typically few, take all
     "event": 4,
 }
 
@@ -264,7 +264,7 @@ def offline_compile(doc_type: str, assets: list[dict], world: dict) -> str:
         by_type: dict[str, list[dict]] = {}
         for a in sampled:
             by_type.setdefault(a.get("type", "other"), []).append(a)
-        type_order = ["character", "location", "event", "faction"]
+        type_order = ["character", "location", "event", "other"]
         for t in type_order:
             if t not in by_type:
                 continue

@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { exportDocument } from "../lib/api";
 import { Btn, Chip, Busy, Banner, EmptyState } from "../components/ui";
+import { IconDocument, IconSearch } from "../components/Icons";
 
 // Document type definitions — keys must match backend/export.py DOC_TYPES
 const DOC_TYPES = [
@@ -54,7 +55,9 @@ export default function Export({ world, assets }) {
 
   const docTypeDef = DOC_TYPES.find((d) => d.id === docTypeId);
 
-  // Distinct non-"—" faction values from assets matching the current docType.
+  // Distinct non-"—" affiliation values from assets matching the current docType.
+  // ("faction" is the underlying field name -- kept as-is in code/data since
+  // it's just a free-text affiliation tag, not every world calls it a "faction".)
   // When assetType is null (beats/pitch) collect from ALL assets.
   const factionOptions = useMemo(() => {
     if (!assets) return [];
@@ -115,10 +118,10 @@ export default function Export({ world, assets }) {
       {/* ── Left: controls ─────────────────────────────────────────────────── */}
       <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
         <div>
-          <h1 style={{ fontSize: 25, marginBottom: 6 }}>Export</h1>
+          <h1 style={{ fontSize: 28, marginBottom: 6 }}>Export</h1>
           <p style={{ color: "var(--text-dim)", fontSize: 14.5, lineHeight: 1.6 }}>
             Compile your world's canon assets into a production-ready Markdown
-            document. Filter by era or faction to focus on a subset.
+            document. Filter by era or affiliation to focus on a subset.
           </p>
         </div>
 
@@ -140,7 +143,7 @@ export default function Export({ world, assets }) {
             )}
           </div>
 
-          {/* Era + faction filters — hidden for "beats" (backend ignores them) */}
+          {/* Era + affiliation filters — hidden for "beats" (backend ignores them) */}
           {docTypeId !== "beats" && (
             <>
               <div>
@@ -160,15 +163,15 @@ export default function Export({ world, assets }) {
               </div>
 
               <div>
-                <div className="section-label">Filter by faction</div>
+                <div className="section-label">Filter by affiliation</div>
                 <select
                   className="field"
                   value={faction}
                   onChange={(e) => { setFaction(e.target.value); setResult(null); }}
-                  title="Only include entries from this faction"
+                  title="Only include entries with this affiliation"
                   style={{ marginTop: 8 }}
                 >
-                  <option value="">All factions</option>
+                  <option value="">All affiliations</option>
                   {factionOptions.map((f) => (
                     <option key={f} value={f}>{f}</option>
                   ))}
@@ -249,17 +252,17 @@ export default function Export({ world, assets }) {
 
           {!busy && !result && !error && (
             <EmptyState
-              icon="📄"
+              icon={IconDocument}
               title="Nothing generated yet"
-              text={`Pick a document type${eras.length > 0 ? ", optionally filter by era or faction," : ""} and hit Generate.`}
+              text={`Pick a document type${eras.length > 0 ? ", optionally filter by era or affiliation," : ""} and hit Generate.`}
             />
           )}
 
           {!busy && isEmpty && (
             <EmptyState
-              icon="🔍"
+              icon={IconSearch}
               title={`No ${docTypeDef.emptyLabel} entries match those filters yet`}
-              text={`Try removing the era or faction filter, or add some ${docTypeDef.emptyLabel} assets to your World Book first.`}
+              text={`Try removing the era or affiliation filter, or add some ${docTypeDef.emptyLabel} assets to your World Book first.`}
             />
           )}
 

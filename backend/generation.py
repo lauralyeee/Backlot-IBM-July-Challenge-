@@ -9,7 +9,12 @@ import re
 import time
 import random
 
-TYPES = ["lore", "character", "location", "faction", "event"]
+# "faction" used to be a fixed asset type -- not every world has factions,
+# or calls them that. Anything that doesn't fit the universal categories
+# below now lands in "other", with the model (or the writer, via the
+# World Book editor) supplying a per-entry label naming what it actually
+# is (a Faction, a Clan, a Guild, ...) -- see schema_for() below.
+TYPES = ["lore", "character", "location", "event", "other"]
 
 
 def persona_system(world: dict) -> str:
@@ -21,19 +26,49 @@ def persona_system(world: dict) -> str:
         f"Your audience is a {role_names}, so blend these needs: {voices}. "
         "You are the guardian of canon: everything you produce must stay consistent with "
         "the established canon provided and must never contradict it. "
+        "Match the tone, genre, and level of realism of this specific world -- do not "
+        "default to fantasy, science-fiction, or mythic tropes unless this world's own "
+        "persona and established canon actually call for them. "
         "Write original material in clear, accessible language."
+        + (f" {premise_block(world)}" if premise_block(world) else "")
     )
 
 
-def schema_for(world: dict) -> str:
+def schema_for(world: dict, title_style: str | None = None) -> str:
     eras = "|".join(world["eras"])
     types = "|".join(TYPES)
+    if title_style == "character":
+        title_key = (
+            '"title" (the character\'s name -- a plausible name this world\'s people '
+            'would actually go by: a first name, full name, nickname, or an in-world '
+            'epithet used the way a *name* is used, never an abstract poetic phrase '
+            'that reads like a chapter or event title)'
+        )
+    else:
+        title_key = '"title" (a concise, fitting name or heading for this entry)'
     return (
         "Output must be a single JSON object and nothing else — no explanation, no markdown. "
-        f'Keys: "title" (short evocative name), "type" ({types}), "era" ({eras}), '
+        f'Keys: {title_key}, "type" ({types} -- pick "other" when the entry is a kind of '
+        'thing this world clearly has (a faction, clan, guild, organization, deity, etc.) '
+        'that isn\'t lore/character/location/event), "typeLabel" (ONLY when type is '
+        '"other": a short 1-3 word name for what kind of thing this is, in this world\'s '
+        'own vocabulary, e.g. "Faction", "Clan", "Guild", "Deity" -- otherwise ""), '
+        f'"era" ({eras}), '
         '"faction" (an established faction or "—"), "mood" (one lowercase word), '
         '"content" (60-140 words). Begin your response with { and end with }.'
     )
+
+
+def premise_block(world: dict) -> str:
+    """Render the world's short premise as a prompt fragment, or "" if none
+    is set. Every world gets *some* description (a preset persona's own
+    blurb, or the writer's own custom-world text) captured once at onboarding
+    -- this is what lets every generation call, and in-character chat, know
+    what the world is actually about instead of only its name and persona."""
+    desc = (world.get("description") or "").strip()
+    if not desc:
+        return ""
+    return f"WORLD PREMISE: {desc}"
 
 
 def timeline_block(world: dict) -> str:
@@ -64,6 +99,7 @@ def normalize_asset(raw: dict, world: dict, fallback_type: str | None = None) ->
         "id": int(time.time() * 1000) + random.randint(0, 999),
         "title": first(raw.get("title"), "Untitled entry"),
         "type": raw.get("type") if raw.get("type") in TYPES else (fallback_type or "lore"),
+        "typeLabel": first(raw.get("typeLabel"), ""),
         "era": raw.get("era") if raw.get("era") in eras else (eras[0] if eras else ""),
         "faction": first(raw.get("faction"), "—"),
         "mood": first(raw.get("mood"), "neutral"),
@@ -84,6 +120,11 @@ def custom_persona_prompt(description: str, custom_eras: list[str] | None = None
     system_prompt = (
         "You are a worldbuilding assistant. Given a brief description of a world concept, "
         "produce a structured persona object for a story world. "
+        "Stay strictly within the genre, tone, and level of realism the description "
+        "implies -- if it reads as contemporary, realistic, romance, drama, thriller, or "
+        "historical fiction, keep everything grounded in that; do not add fantasy, "
+        "science-fiction, magic, or supernatural elements unless the description itself "
+        "calls for them. "
         "Output must be a single JSON object and nothing else — no explanation, no markdown. "
         "Begin your response with { and end with }."
     )
@@ -102,11 +143,27 @@ def custom_persona_prompt(description: str, custom_eras: list[str] | None = None
         "Create a persona for this world concept:\n"
         f"{description}\n\n"
         "Return a JSON object with exactly these keys:\n"
-        "  \"personaLabel\": a short evocative label for the world archetype (string, 2-5 words),\n"
+        "  \"personaLabel\": a short label naming this story's actual genre/premise, in "
+        "the same register as the description (string, 2-5 words) -- do not invent a "
+        "fantasy or game-like archetype unless the description itself is fantasy or "
+        "game-like. The description may compare itself to real, existing shows, films, "
+        "or books -- if so, do NOT quote or name those real titles in this label. "
+        "Describe the genre, tone, and premise in your own original words instead "
+        "(for example, \"a mix of Killing Eve and Fleabag\" should become something "
+        "like \"Dark-Comedy Crime Thriller\", not \"Killing Eve Fleabag Thriller\"),\n"
         f"{eras_instruction}"
-        "  \"nameIdeas\": an array of exactly 4 evocative world name suggestions as strings,\n"
+        "  \"nameIdeas\": an array of exactly 4 fitting world name suggestions, matching "
+        "the description's own genre, as strings,\n"
+        "  \"ideas\": an array of 4-6 starter-idea objects for this world, each with keys "
+        "\"label\" (a short 2-5 word tag) and \"text\" (one sentence pitching a scene, "
+        "conflict, or character seed a writer could expand into a full entry) -- these "
+        "power a \"starter ideas\" picker, so make each one a genuinely usable prompt, "
+        "not a restatement of the premise,\n"
         "  \"seed\": an array of 2-3 starter canon entries, each an object with keys: "
-        "\"title\" (short name), \"type\" (one of: lore|character|location|faction|event), "
+        "\"title\" (short name), \"type\" (one of: lore|character|location|event|other -- "
+        "use \"other\" for a faction/clan/guild/organization/deity/etc. that doesn't fit "
+        "the rest), \"typeLabel\" (ONLY when type is \"other\": a short 1-3 word name for "
+        "what kind of thing this is, e.g. \"Faction\", \"Clan\" -- otherwise \"\"), "
         "\"era\" (must match one of the eras you defined), "
         "\"faction\" (an established faction name or \"\\u2014\"), "
         "\"mood\" (one lowercase word), "
@@ -128,6 +185,7 @@ def normalize_seed_entry(raw: dict, eras: list[str]) -> dict:
     return {
         "title": first(raw.get("title"), "Untitled entry"),
         "type": raw.get("type") if raw.get("type") in TYPES else "lore",
+        "typeLabel": first(raw.get("typeLabel"), ""),
         "era": raw.get("era") if raw.get("era") in eras else (eras[0] if eras else ""),
         "faction": first(raw.get("faction"), "\u2014"),
         "mood": first(raw.get("mood"), "neutral"),
@@ -144,7 +202,7 @@ def _pick(arr, seed):
     return arr[abs(seed) % len(arr)]
 
 
-def offline_asset(idea: str, world: dict, assets: list[dict], force_type: str | None = None) -> dict:
+def offline_asset(idea: str, world: dict, assets: list[dict], force_type: str | None = None, force_type_label: str | None = None) -> dict:
     seed = len(idea) + len(assets)
     related = _pick(assets, seed) if assets else None
     title = " ".join(idea.split("—")[0].split(".,")[0].split()[:5]).capitalize() or "New entry"
@@ -159,6 +217,7 @@ def offline_asset(idea: str, world: dict, assets: list[dict], force_type: str | 
         "id": int(time.time() * 1000) + random.randint(0, 999),
         "title": title,
         "type": force_type or ("character" if is_char else "location"),
+        "typeLabel": force_type_label or "",
         "era": _pick(world.get("eras", [""]), seed),
         "faction": related["faction"] if (related and related.get("faction") != "—") else "—",
         "mood": "unsettled",
@@ -195,15 +254,27 @@ def offline_audit(assets: list[dict]) -> dict:
     for a in assets:
         key = a["title"].lower()
         if key in seen:
+            other = seen[key]
+            if other["type"] == a["type"]:
+                issue = "Two entries share the same name, which may confuse your canon."
+            else:
+                issue = (
+                    f'"{a["title"]}" is used by both a {other["type"]} and a {a["type"]} '
+                    "— easy to mix up when picking an entry elsewhere in the app."
+                )
             issues.append({
                 "severity": "low",
-                "entries": [seen[key]["title"], a["title"]],
-                "issue": "Two entries share the same name, which may confuse your canon.",
+                "entries": [other["title"], a["title"]],
+                "issue": issue,
             })
         seen[key] = a
-    factions = {a["title"] for a in assets if a["type"] == "faction"}
+    # "faction" used to be a dedicated type; now any "other"-typed entry
+    # can stand in for it (a Faction/Clan/Guild/etc.), so this checks by
+    # title match across all entries rather than one hardcoded type.
+    titles = {a["title"] for a in assets}
+    has_org_entries = any(b["type"] == "other" for b in assets)
     for a in assets:
-        if a["faction"] != "—" and a["faction"] not in factions and any(b["type"] == "faction" for b in assets):
+        if a["faction"] != "—" and a["faction"] not in titles and has_org_entries:
             issues.append({
                 "severity": "low",
                 "entries": [a["title"]],

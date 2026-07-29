@@ -88,6 +88,58 @@ def init_db():
         world_cols = {row[1] for row in conn.execute("PRAGMA table_info(worlds)").fetchall()}
         if "era_notes" not in world_cols:
             conn.execute("ALTER TABLE worlds ADD COLUMN era_notes TEXT NOT NULL DEFAULT '{}'")
+        # Migration: description on worlds -- a short free-text world premise.
+        # Captured once at onboarding (reusing text the writer already typed,
+        # or a preset persona's own blurb) and fed into every generation
+        # prompt via generation.premise_block() so the model -- and in-character
+        # chat -- actually knows what this world is about, not just its name.
+        if "description" not in world_cols:
+            conn.execute("ALTER TABLE worlds ADD COLUMN description TEXT NOT NULL DEFAULT ''")
+        # Migration: 3D concept model fields on assets (3D character concept
+        # viewer feature). All nullable/additive, same pattern as portrait_*
+        # above. model_status distinguishes "no model attempted yet" (NULL)
+        # from "pending" / "ready" / "failed" -- generation is async (Blender
+        # subprocess or a manual upload), unlike the synchronous portrait
+        # endpoint, so the frontend needs a state to poll.
+        if "model_path" not in existing_cols:
+            conn.execute("ALTER TABLE assets ADD COLUMN model_path TEXT DEFAULT NULL")
+        if "model_source" not in existing_cols:
+            conn.execute("ALTER TABLE assets ADD COLUMN model_source TEXT DEFAULT NULL")
+        if "model_status" not in existing_cols:
+            conn.execute("ALTER TABLE assets ADD COLUMN model_status TEXT DEFAULT NULL")
+        if "model_error" not in existing_cols:
+            conn.execute("ALTER TABLE assets ADD COLUMN model_error TEXT DEFAULT NULL")
+        if "model_added_at" not in existing_cols:
+            conn.execute("ALTER TABLE assets ADD COLUMN model_added_at INTEGER DEFAULT NULL")
+        # Migration: model_kind -- the Gallery grew beyond 3D-only concept
+        # models to also accept image and video concept media (useful for
+        # lore/location/event entries, which can't generate a 3D model, and
+        # as an alternative for characters too). NULL/"3d" both mean "3D
+        # model" for backward compatibility with rows written before this
+        # column existed -- see _row_to_asset() below.
+        if "model_kind" not in existing_cols:
+            conn.execute("ALTER TABLE assets ADD COLUMN model_kind TEXT DEFAULT NULL")
+        # Migration: voice_id + voice_description (AI-cast character voice
+        # feature). voice_id is the permanent voice identifier (a Gemini TTS
+        # persisted once a cast is confirmed (mirrors portrait_prompt/
+        # portrait_seed and model_* above -- additive, nullable, no backfill
+        # onto existing characters). voice_description is kept alongside it
+        # so a later recast can show/reuse the description that produced it
+        # instead of re-drafting from scratch every time.
+        if "voice_id" not in existing_cols:
+            conn.execute("ALTER TABLE assets ADD COLUMN voice_id TEXT DEFAULT NULL")
+        if "voice_description" not in existing_cols:
+            conn.execute("ALTER TABLE assets ADD COLUMN voice_description TEXT DEFAULT NULL")
+        # Migration: type_label (custom category name for "other"-typed
+        # assets). "faction" used to be a fixed asset type -- not every
+        # world has factions, or calls them that, so any asset that
+        # doesn't fit lore/character/location/event now lands in the
+        # generic "other" type, with this column holding the AI- (or
+        # writer-) supplied name for what kind of thing it actually is
+        # (e.g. "Faction", "Clan", "Guild"). Additive, nullable, no
+        # backfill -- same pattern as portrait_prompt/voice_id above.
+        if "type_label" not in existing_cols:
+            conn.execute("ALTER TABLE assets ADD COLUMN type_label TEXT DEFAULT NULL")
 
 
 # ── Worlds ──────────────────────────────────────────────────────────────────
@@ -99,13 +151,14 @@ def create_world(data: dict) -> dict:
     """Insert a world row and return the full row dict."""
     with _connect() as conn:
         conn.execute(
-            """INSERT INTO worlds (id, name, persona_id, persona_label, eras, era_notes, ideas, dialects, roles, created_at)
-               VALUES (:id, :name, :persona_id, :persona_label, :eras, :era_notes, :ideas, :dialects, :roles, :created_at)""",
+            """INSERT INTO worlds (id, name, persona_id, persona_label, description, eras, era_notes, ideas, dialects, roles, created_at)
+               VALUES (:id, :name, :persona_id, :persona_label, :description, :eras, :era_notes, :ideas, :dialects, :roles, :created_at)""",
             {
                 "id": data["id"],
                 "name": data["name"],
                 "persona_id": data["personaId"],
                 "persona_label": data["personaLabel"],
+                "description": data.get("description", ""),
                 "eras": json.dumps(data["eras"]),
                 "era_notes": json.dumps(data.get("eraNotes", {})),
                 "ideas": json.dumps(data["ideas"]),
@@ -130,6 +183,7 @@ def update_world(world_id: str, data: dict) -> dict | None:
         "name": "name",
         "personaId": "persona_id",
         "personaLabel": "persona_label",
+        "description": "description",
         "eras": "eras",
         "eraNotes": "era_notes",
         "ideas": "ideas",
@@ -155,6 +209,7 @@ def _row_to_world(row) -> dict:
         "name": row["name"],
         "personaId": row["persona_id"],
         "personaLabel": row["persona_label"],
+        "description": row["description"] or "",
         "eras": json.loads(row["eras"]),
         "eraNotes": json.loads(row["era_notes"] or "{}"),
         "ideas": json.loads(row["ideas"]),
@@ -169,13 +224,14 @@ def _row_to_world(row) -> dict:
 def create_asset(world_id: str, data: dict) -> dict:
     with _connect() as conn:
         conn.execute(
-            """INSERT INTO assets (id, world_id, title, type, era, faction, mood, content, offline, created_at, source_asset_id, status, source_document_id)
-               VALUES (:id, :world_id, :title, :type, :era, :faction, :mood, :content, :offline, :created_at, :source_asset_id, :status, :source_document_id)""",
+            """INSERT INTO assets (id, world_id, title, type, type_label, era, faction, mood, content, offline, created_at, source_asset_id, status, source_document_id)
+               VALUES (:id, :world_id, :title, :type, :type_label, :era, :faction, :mood, :content, :offline, :created_at, :source_asset_id, :status, :source_document_id)""",
             {
                 "id": data["id"],
                 "world_id": world_id,
                 "title": data["title"],
                 "type": data["type"],
+                "type_label": data.get("typeLabel") or None,
                 "era": data["era"],
                 "faction": data.get("faction", "—"),
                 "mood": data.get("mood", "neutral"),
@@ -235,11 +291,20 @@ def update_asset(asset_id: int, data: dict) -> dict:
         "faction": "faction",
         "mood": "mood",
         "content": "content",
+        "typeLabel": "type_label",
         "offline": "offline",
         "status": "status",
         "source_document_id": "source_document_id",
         "portrait_prompt": "portrait_prompt",
         "portrait_seed": "portrait_seed",
+        "model_path": "model_path",
+        "model_source": "model_source",
+        "model_status": "model_status",
+        "model_error": "model_error",
+        "model_added_at": "model_added_at",
+        "model_kind": "model_kind",
+        "voice_id": "voice_id",
+        "voice_description": "voice_description",
     }
     for key, col in mapping.items():
         if key in data:
@@ -308,6 +373,24 @@ def _row_to_asset(row) -> dict:
     if row["portrait_prompt"]:
         result["portraitPrompt"] = row["portrait_prompt"]
         result["portraitSeed"] = row["portrait_seed"]
+    if row["model_status"]:
+        result["modelStatus"] = row["model_status"]
+        if row["model_path"]:
+            result["modelPath"] = row["model_path"]
+        if row["model_source"]:
+            result["modelSource"] = row["model_source"]
+        if row["model_error"]:
+            result["modelError"] = row["model_error"]
+        if row["model_added_at"]:
+            result["modelAddedAt"] = row["model_added_at"]
+        # Rows written before model_kind existed (or the Blender/CharMorph
+        # path, which never sets it) are always a 3D model.
+        result["modelKind"] = row["model_kind"] or "3d"
+    if row["voice_id"]:
+        result["voiceId"] = row["voice_id"]
+        result["voiceDescription"] = row["voice_description"] or ""
+    if row["type_label"]:
+        result["typeLabel"] = row["type_label"]
     return result
 
 

@@ -1,16 +1,33 @@
 import { useState } from "react";
 import { ROLES, PERSONAS } from "../lib/worldData";
 import { Btn, Chip, Field } from "../components/ui";
-import { IconSun, IconMoon, IconCheck, IconArrowRight } from "../components/Icons";
+import { IconSun, IconMoon, IconCheck, IconArrowRight, IconDocument, IconPerson, IconMic, IconClock, IconTag } from "../components/Icons";
 import { generateCustomPersona } from "../lib/api";
 
 const CAPABILITIES = [
-  { icon: "📜", title: "Gap-Filling Engine", text: "Turn a one-line idea into full, canon-consistent lore." },
-  { icon: "🧑", title: "NPC Cast Generator", text: "Populate your world with characters you can talk to." },
-  { icon: "🗣️", title: "Dialect & Voice", text: "Give each faction a distinct, hearable voice." },
-  { icon: "🕰️", title: "Time-Shift Mode", text: "See any entry re-rendered in a different era." },
-  { icon: "🏷️", title: "Auto-Tagging", text: "Everything is tagged and searchable as your world grows." },
+  { icon: IconDocument, title: "Gap-Filling Engine", text: "Turn a one-line idea into full, canon-consistent lore." },
+  { icon: IconPerson, title: "Character Generator", text: "Populate your world with characters you can talk to." },
+  { icon: IconMic, title: "Dialect & Voice", text: "Give each faction a distinct, hearable voice." },
+  { icon: IconClock, title: "Time-Shift Mode", text: "See any entry re-rendered in a different era." },
+  { icon: IconTag, title: "Auto-Tagging", text: "Everything is tagged and searchable as your world grows." },
 ];
+
+// api.js's req() throws an Error whose message is "API POST /path -> 502: <raw body>".
+// The raw body is FastAPI's {"detail": "..."} JSON. Pull the actual reason out of it
+// so a failed custom-world generation shows *why* instead of a silent "offline" state.
+function extractErrorDetail(err) {
+  const msg = (err && err.message) || "";
+  const braceIdx = msg.indexOf("{");
+  if (braceIdx !== -1) {
+    try {
+      const parsed = JSON.parse(msg.slice(braceIdx));
+      if (parsed && typeof parsed.detail === "string") return parsed.detail;
+    } catch {
+      // body wasn't JSON (e.g. a network-level failure) -- fall through to the raw message
+    }
+  }
+  return msg || "unknown error";
+}
 
 export default function Onboarding({ onDone, mode, toggleTheme }) {
   const [step, setStep] = useState(0);
@@ -21,9 +38,9 @@ export default function Onboarding({ onDone, mode, toggleTheme }) {
   // custom-world state
   const [showCustom, setShowCustom] = useState(false);
   const [customDesc, setCustomDesc] = useState("");
-  const [customErasText, setCustomErasText] = useState("");
   const [customGenerating, setCustomGenerating] = useState(false);
   const [customOffline, setCustomOffline] = useState(false);
+  const [customErrorReason, setCustomErrorReason] = useState("");
 
   const toggleRole = (id) => setRoles((r) => (r.includes(id) ? r.filter((x) => x !== id) : [...r, id]));
 
@@ -33,51 +50,42 @@ export default function Onboarding({ onDone, mode, toggleTheme }) {
     setStep(2);
   };
 
-  // Parses the free-form "Founding, The Long Winter, Present Day" input into
-  // a clean array. Returns null (not an empty array) if the writer didn't
-  // type at least 2 usable era names, so callers can tell "no custom eras
-  // given" apart from "gave an empty string."
-  const parseCustomEras = () => {
-    const parsed = customErasText
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    return parsed.length >= 2 ? parsed : null;
-  };
-
   const handleCustomGenerate = async () => {
     if (customGenerating || customDesc.trim().length < 10) return;
     setCustomGenerating(true);
     setCustomOffline(false);
-    const customEras = parseCustomEras();
+    setCustomErrorReason("");
     try {
-      const data = await generateCustomPersona(customDesc.trim(), customEras);
+      const data = await generateCustomPersona(customDesc.trim());
       const built = {
         id: "custom",
         label: data.personaLabel || "Custom world",
         desc: customDesc.trim(),
-        // The backend already forces data.eras to equal customEras when it
-        // was given, so trusting data.eras here covers both paths.
+        // No writer-typed timeline anymore -- the AI always chooses the eras.
         eras: Array.isArray(data.eras) && data.eras.length >= 2
           ? data.eras
-          : (customEras || ["Act One", "Act Two", "Act Three"]),
+          : ["Act One", "Act Two", "Act Three"],
         nameIdeas: Array.isArray(data.nameIdeas) ? data.nameIdeas : [],
         dialects: {},
-        ideas: [],
+        ideas: Array.isArray(data.ideas) ? data.ideas : [],
         seed: Array.isArray(data.seed) ? data.seed : [],
       };
       setPersona(built);
       setStep(2);
-    } catch (_err) {
-      // Offline fallback — honor a writer-typed timeline even when the
-      // service is unreachable; only fall back to the generic 3-act
-      // placeholder if they didn't specify their own eras.
+    } catch (err) {
+      // Offline fallback — fall back to a generic 3-act placeholder timeline
+      // when the service is unreachable. Also surface *why* it failed -- the
+      // two most common causes are the model call erroring out
+      // (network/auth/rate-limit) or the JSON response getting truncated
+      // past max_tokens (parse_json has no partial-repair path, so a
+      // truncation loses the whole persona, not just the seed).
       setCustomOffline(true);
+      setCustomErrorReason(extractErrorDetail(err));
       const built = {
         id: "custom",
         label: "Custom world",
         desc: customDesc.trim(),
-        eras: customEras || ["Act One", "Act Two", "Act Three"],
+        eras: ["Act One", "Act Two", "Act Three"],
         nameIdeas: [],
         dialects: {},
         ideas: [],
@@ -101,7 +109,7 @@ export default function Onboarding({ onDone, mode, toggleTheme }) {
         borderRight: "1px solid var(--border-soft)",
       }} className="onboarding-pitch">
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 28 }}>
-          <div className="brand-mark" style={{ width: 44, height: 44, fontSize: 22 }}>W</div>
+          <div className="brand-mark" style={{ width: 44, height: 44 }} />
           <div style={{ fontFamily: "var(--font-display)", fontSize: 15, color: "var(--text-dim)", letterSpacing: "0.02em" }}>Worldbuilding Co-Pilot</div>
         </div>
         <h1 style={{ fontSize: 40, lineHeight: 1.15, marginBottom: 16, maxWidth: 480 }}>
@@ -115,7 +123,7 @@ export default function Onboarding({ onDone, mode, toggleTheme }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
           {CAPABILITIES.map((c) => (
             <div key={c.title} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
-              <div style={{ fontSize: 20, width: 32 }}>{c.icon}</div>
+              <c.icon width={20} height={20} style={{ flexShrink: 0, marginTop: 2, color: "var(--text-dim)" }} />
               <div>
                 <div style={{ fontWeight: 600, fontSize: 14.5 }}>{c.title}</div>
                 <div style={{ fontSize: 13.5, color: "var(--text-dim)" }}>{c.text}</div>
@@ -224,11 +232,6 @@ export default function Onboarding({ onDone, mode, toggleTheme }) {
                         resize: "vertical", fontFamily: "inherit",
                       }}
                     />
-                    <Field
-                      value={customErasText}
-                      onChange={(e) => setCustomErasText(e.target.value)}
-                      placeholder="Optional: your own era names, comma-separated (e.g. Founding, The Long Winter, Present Day) — leave blank for AI to suggest 3–6"
-                    />
                     <Btn
                       variant="primary"
                       disabled={customDesc.trim().length < 10 || customGenerating}
@@ -256,6 +259,16 @@ export default function Onboarding({ onDone, mode, toggleTheme }) {
                   padding: "10px 14px", marginBottom: 16,
                 }}>
                   Generated offline — eras and seed entries will be placeholders. You can refine them later.
+                  {customErrorReason && (
+                    <div style={{ marginTop: 6, color: "var(--text-faint)" }}>
+                      Reason: {customErrorReason}
+                    </div>
+                  )}
+                  <div style={{ marginTop: 8 }}>
+                    <Btn small onClick={() => { setStep(1); setShowCustom(true); }} title="Go back and try generating this world again">
+                      Try again
+                    </Btn>
+                  </div>
                 </div>
               )}
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
@@ -266,6 +279,7 @@ export default function Onboarding({ onDone, mode, toggleTheme }) {
                 <Btn onClick={() => { setStep(1); setCustomOffline(false); }} title="Back to choosing your world's style">Back</Btn>
                 <Btn variant="primary" disabled={!name.trim()} title="Save this world and start building" onClick={() => onDone({
                   name: name.trim(), roles, personaId: persona.id, personaLabel: persona.label,
+                  description: persona.desc || "",
                   eras: persona.eras, ideas: persona.ideas, dialects: persona.dialects || {},
                   seed: persona.seed.map((s, i) => ({ ...s, id: i + 1, createdAt: Date.now() - (persona.seed.length - i) * 1000 })),
                 })}>Create my world <IconArrowRight width={16} height={16} /></Btn>

@@ -1,10 +1,106 @@
+// Role ids are stable identifiers persisted on each world's `roles` array —
+// only the label/blurb/voice copy changed here (to match the target
+// audience: screenwriters, producers, and writers), the ids themselves
+// stay the same so existing worlds' saved roles keep resolving correctly.
 export const ROLES = [
-  { id: "writer", label: "Writer", blurb: "Novels, series, short stories", voice: "prose-ready lore with narrative texture" },
-  { id: "game", label: "Game designer", blurb: "Video games, tabletop, RPGs", voice: "gameplay-usable hooks, factions, and stakes" },
-  { id: "media", label: "Interactive media team", blurb: "Podcasts, transmedia, experiences", voice: "format-neutral canon that adapts across prose, audio, and visual formats" },
+  { id: "writer", label: "Screenwriter", blurb: "Features, pilots, and episodic series", voice: "script-ready lore — scene-actionable detail and dialogue-aware character voice" },
+  { id: "game", label: "Producer", blurb: "Development, packaging, and pitching", voice: "packaging-ready canon with clear hooks and stakes suited for pitching to buyers" },
+  { id: "media", label: "Novelist", blurb: "Novels, series, and short fiction", voice: "prose-ready lore with narrative texture" },
 ];
 
 export const PERSONAS = [
+  {
+    id: "contemporary",
+    label: "Contemporary drama novelist",
+    desc: "Realistic present-day fiction about the people, families, and choices that define an ordinary life",
+    eras: ["Before", "The Turning Point", "After"],
+    nameIdeas: ["What We Carry", "The Long Way Back", "Everything We Didn't Say", "Ordinary Weather"],
+    dialects: {
+      "The Hallworth Family": { style: "plain-spoken, careful, a little guarded", rate: 0.95, pitch: 0.95 },
+    },
+    ideas: [
+      { label: "A sibling returns home", text: "An estranged sibling comes back for a parent's illness and has to share a house with the family they left" },
+      { label: "A job loss ripples out", text: "A layoff that quietly reorganizes a marriage, a friendship, and a kid's sense of what's stable" },
+      { label: "An inherited house", text: "A house left to three siblings who each remember growing up in it differently, and disagree about what to do with it" },
+      { label: "A secret finally surfaces", text: "A decades-old family secret comes out at the worst possible dinner, in front of the worst possible guest" },
+      { label: "A friendship under strain", text: "Two friends whose lives have quietly grown apart try to have the vacation they used to have" },
+      { label: "A diagnosis changes the plan", text: "A diagnosis that forces a family to say the things they'd been putting off indefinitely" },
+    ],
+    seed: [
+      { title: "The Hallworth House", type: "location", era: "Before", faction: "The Hallworth Family", mood: "familiar", content: "A three-bedroom house on a street that's changed more than the house has. The kitchen table still has the water ring from a party in 2003 that nobody talks about anymore." },
+      { title: "Dana Hallworth", type: "character", era: "Before", faction: "The Hallworth Family", mood: "tired", content: "The one who stayed. Manages her mother's medications, her brother's silences, and a job she's too proud to complain about. Keeps a running list of things she'll say once, someday, to somebody." },
+      { title: "The Phone Call at 6 a.m.", type: "event", era: "The Turning Point", faction: "—", mood: "unsettled", content: "The call that starts the part of the story where nothing gets to stay the same. Nobody in the family remembers the exact words afterward — only that they were standing when they heard them." },
+    ],
+  },
+  {
+    id: "romcom",
+    label: "Contemporary rom-com writer",
+    desc: "A modern-day love story: meet-cutes, miscommunication, and the people who almost get in the way",
+    eras: ["Before They Meet", "The Complication", "The Grand Gesture"],
+    nameIdeas: ["The Coffee Shop on 5th", "Two Weeks' Notice", "The Wrong Number", "Second Chances, Third Dates"],
+    dialects: {
+      "The Downtown Crowd": { style: "quick, witty, overlapping banter", rate: 1.1, pitch: 1.05 },
+    },
+    ideas: [
+      { label: "A meet-cute gone wrong", text: "Two strangers grab the same last cab in the rain and end up sharing it across town, arguing the whole way" },
+      { label: "A fake relationship", text: "Two coworkers agree to pose as a couple for a family wedding, and the lines blur faster than either expected" },
+      { label: "A best-friend confession", text: "One half of a decade-long friendship finally admits they've felt more for years, right before the other one moves away" },
+      { label: "The ex at the wedding", text: "A wedding where the maid of honor's ex is the best man, and everyone else at the head table knows it" },
+      { label: "A rival bakery", text: "Two competing bakeries on the same block, run by two people who can't stand each other and can't stop showing up at each other's door" },
+      { label: "A wrong-number text thread", text: "A months-long text thread that started as a wrong number and became the most honest relationship either of them has" },
+    ],
+    seed: [
+      { title: "The Merrow Street Café", type: "location", era: "Before They Meet", faction: "The Downtown Crowd", mood: "cozy", content: "A corner café with mismatched chairs and a chalkboard menu that never gets updated. Regulars claim the back booth by the window is good luck for first dates — nobody can explain why, they just keep coming back to it." },
+      { title: "Priya Anand", type: "character", era: "Before They Meet", faction: "The Downtown Crowd", mood: "guarded", content: "A freelance illustrator who took over her late aunt's café lease on a whim and hasn't slept properly since. Fiercely loyal to the three regulars she actually likes, and allergic to being asked about her five-year plan." },
+      { title: "The Note Left on the Register", type: "event", era: "The Complication", faction: "—", mood: "hopeful", content: "The night a customer left a note instead of a tip — three lines, no name, and a compliment specific enough that Priya has read it a dozen times trying to guess who wrote it." },
+    ],
+  },
+  {
+    id: "thriller",
+    label: "Mystery & thriller plotter",
+    desc: "A crime, an investigation, and the secrets that unravel — grounded suspense, nothing supernatural",
+    eras: ["Before the Crime", "The Investigation", "The Reckoning"],
+    nameIdeas: ["Nothing Left Unsaid", "The Last Known Address", "A Quiet Kind of Guilty", "What the Report Left Out"],
+    dialects: {
+      "Riverside PD": { style: "clipped, procedural, careful not to overpromise", rate: 1.0, pitch: 0.9 },
+    },
+    ideas: [
+      { label: "An alibi with a gap", text: "A solid alibi that has one unaccounted-for hour nobody thought to ask about until now" },
+      { label: "A witness who recants", text: "A key witness who suddenly changes their story, and the detective who has to figure out who got to them" },
+      { label: "A cold case reopens", text: "A cold case reopened because of a single new detail a retiring officer can't let go of" },
+      { label: "The wrong person confesses", text: "Someone confesses to a crime they didn't commit, and the investigator has to work out why" },
+      { label: "A missing persons pattern", text: "A string of missing-persons cases that only look connected if you're the one person still cross-referencing them" },
+      { label: "Evidence that doesn't fit", text: "A piece of evidence that contradicts the tidy version of events everyone has already agreed to believe" },
+    ],
+    seed: [
+      { title: "Riverside Precinct", type: "location", era: "The Investigation", faction: "Riverside PD", mood: "tense", content: "A precinct running on too much coffee and not enough staff. The case board in the back room has stayed up eleven months past when it should have been cleared, and everyone's stopped mentioning it out loud." },
+      { title: "Marisol Ortega", type: "character", era: "The Investigation", faction: "Riverside PD", mood: "methodical", content: "Fourteen years on the force, known for re-reading files nobody else will touch twice. Doesn't believe in coincidence and has the case-closure rate to back it up. Losing patience with the people telling her to let this one go." },
+      { title: "The 11:40 Call", type: "event", era: "Before the Crime", faction: "—", mood: "ominous", content: "A phone call placed at 11:40 p.m. that three people gave three different accounts of afterward. The phone records exist. The transcript doesn't." },
+    ],
+  },
+  {
+    id: "historical",
+    label: "Historical fiction chronicler",
+    desc: "A real or realistic past setting — grounded history, no magic, no invented technology",
+    eras: ["Rising Tensions", "The Event", "The Aftermath"],
+    nameIdeas: ["The Long Correspondence", "What the Harbor Remembers", "A Decent Winter", "The Ones Who Stayed"],
+    dialects: {
+      "The Dockside Quarter": { style: "period-formal, measured, class-conscious", rate: 0.9, pitch: 0.95 },
+    },
+    ideas: [
+      { label: "A letter arrives too late", text: "A letter that arrives months after it was needed, and changes nothing except how someone remembers that year" },
+      { label: "A trade disrupted", text: "A trade route or livelihood disrupted by a real historical event, and the family who has to start over" },
+      { label: "Two sides of a household", text: "A household split by loyalty to opposing sides of a conflict, still sharing the same table" },
+      { label: "A record nearly lost", text: "A diary or ledger that survives by luck and becomes the only account of what actually happened" },
+      { label: "An unlikely alliance", text: "Two people who would never have spoken under ordinary circumstances, thrown together by the period's upheaval" },
+      { label: "A return after years away", text: "Someone returning to a hometown that the era has changed more than they have" },
+    ],
+    seed: [
+      { title: "The Dockside Quarter", type: "location", era: "Rising Tensions", faction: "The Dockside Quarter", mood: "watchful", content: "A harbor district of warehouses, boarding houses, and a church that doubles as the neighborhood's real information exchange. Everyone here has a stake in whether the ships keep coming." },
+      { title: "Eleanor Whitfield", type: "character", era: "Rising Tensions", faction: "The Dockside Quarter", mood: "resolute", content: "Runs her late husband's shipping ledger herself, against the advice of nearly everyone. Keeps her own counsel about which way the political wind is blowing, and writes it all down anyway." },
+      { title: "The Closing of the Harbor", type: "event", era: "The Event", faction: "—", mood: "grave", content: "The week the harbor shut down without warning. Some families had a day to prepare. Most didn't. What people did in that week is still, years later, how the quarter sorts out who to trust." },
+    ],
+  },
   {
     id: "odyssey",
     label: "Epic odyssey chronicler",
@@ -100,17 +196,26 @@ export const PERSONAS = [
     ],
     seed: [
       { title: "Platform Nine of Central Station", type: "location", era: "Present Day", faction: "The Night Ledger", mood: "uneasy", content: "A decommissioned platform that appears on no current map. Trains stop there only between 3:00 and 3:04 a.m., and only for passengers carrying an unpaid debt." },
-      { title: "The Night Ledger", type: "faction", era: "The Quiet Century", faction: "The Night Ledger", mood: "secretive", content: "A brokerage of favours operating out of the city's closed spaces. Every favour is recorded; nothing is ever forgiven, only traded." },
+      { title: "The Night Ledger", type: "other", typeLabel: "Faction", era: "The Quiet Century", faction: "The Night Ledger", mood: "secretive", content: "A brokerage of favours operating out of the city's closed spaces. Every favour is recorded; nothing is ever forgiven, only traded." },
     ],
   },
 ];
 
-export const TYPES = ["lore", "character", "location", "faction", "event"];
+// "faction" used to be a fixed asset type, but not every world has
+// factions (or calls them that) -- a mystery world might have "suspects,"
+// a sci-fi world "corporations," a myth world "pantheons." Anything that
+// doesn't fit the universal categories below now lands in "other," with
+// the AI (or the writer, via the World Book editor) supplying a
+// per-entry typeLabel naming what it actually is (e.g. "Faction," "Clan,"
+// "Guild") -- see generation.py/generation.js schemaFor().
+export const TYPES = ["lore", "character", "location", "event", "other"];
 
+// Icons for each type live in components/Icons.jsx (TYPE_ICONS / TypeIcon) —
+// kept out of this data file so worldData.js stays framework-agnostic.
 export const TYPE_META = {
-  lore: { icon: "📜", label: "Lore" },
-  character: { icon: "🧑", label: "Character" },
-  location: { icon: "🗺️", label: "Location" },
-  faction: { icon: "🛡️", label: "Faction" },
-  event: { icon: "⚡", label: "Event" },
+  lore: { label: "Lore" },
+  character: { label: "Character" },
+  location: { label: "Location" },
+  event: { label: "Event" },
+  other: { label: "Other" },
 };

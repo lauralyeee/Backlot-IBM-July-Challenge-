@@ -30,5 +30,5 @@ backend/worldbuilding.db-shm
 backend/worldbuilding.db-wal
 
 # Environment variables
-# .env
-# .env.*
+.env
+.env.*

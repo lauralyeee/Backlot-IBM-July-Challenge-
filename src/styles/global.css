@@ -1,33 +1,49 @@
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
 
+/*
+  Film-theme palette — deliberately monochrome, built from a single
+  five-stop grayscale (Laura's reference: #DAD9D8, #A7A7A6, #4B4B4A,
+  #1B1B1A, #0A0A0A) plus pure black/white as the outer bounds. No accent
+  hue anywhere — primary actions and active states read through weight,
+  fill, and contrast instead of color, matching the "fully monochrome, no
+  accent" direction. The two exceptions are --danger and --ok, kept as a
+  bare whisper of warm/cool tint (not a saturated color) purely so an
+  error banner and a confirmation banner remain tellable apart at a
+  glance — flagged here in case that reads as too much and should go
+  fully neutral too.
+*/
 :root {
-  --bg: #0E1116;
-  --bg-elevated: #151A21;
-  --surface: #1B222B;
-  --surface-hover: #212A35;
-  --raised: #242E3A;
-  --border: #2C3742;
-  --border-soft: #232C36;
-  --text: #F3F1EC;
-  --text-dim: #9CA7B4;
-  --text-faint: #6B7580;
-  --accent: #E3A857;
-  --accent-strong: #F0B96B;
-  --on-accent: #14100A;
-  --accent-soft: rgba(227, 168, 87, 0.14);
-  --teal: #5FB8AE;
-  --teal-soft: rgba(95, 184, 174, 0.14);
-  --danger: #E08877;
-  --danger-soft: rgba(224, 136, 119, 0.12);
-  --ok: #7FC494;
-  --ok-soft: rgba(127, 196, 148, 0.12);
+  --bg: #0A0A0A;
+  --bg-elevated: #121212;
+  --surface: #1B1B1A;
+  --surface-hover: #242423;
+  --raised: #2E2E2D;
+  --border: #3A3A39;
+  --border-soft: #262625;
+  --text: #DAD9D8;
+  --text-dim: #A7A7A6;
+  --text-faint: #6E6E6D;
 
-  --font-display: 'Fraunces', Georgia, serif;
+  /* "accent" kept as a token name for drop-in compatibility with existing
+     components, but resolves to the monochrome scale — a light, high-
+     contrast fill used for primary actions/active states, not a hue. */
+  --accent: #DAD9D8;
+  --accent-strong: #FFFFFF;
+  --on-accent: #0A0A0A;
+  --accent-soft: rgba(218, 217, 216, 0.10);
+  --teal: #DAD9D8;
+  --teal-soft: rgba(218, 217, 216, 0.10);
+  --danger: #C9A8A3;
+  --danger-soft: rgba(201, 168, 163, 0.10);
+  --ok: #A8C0AE;
+  --ok-soft: rgba(168, 192, 174, 0.10);
+
+  --font-display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
   --font-body: 'Inter', system-ui, sans-serif;
 
   --radius-sm: 8px;
-  --radius: 14px;
-  --radius-lg: 20px;
+  --radius: 10px;
+  --radius-lg: 16px;
 
   --space-1: 4px;
   --space-2: 8px;
@@ -38,37 +54,38 @@
   --space-7: 48px;
   --space-8: 64px;
 
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.2);
-  --shadow-md: 0 8px 24px rgba(0,0,0,0.28);
-  --shadow-lg: 0 16px 48px rgba(0,0,0,0.36);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-md: 0 8px 24px rgba(0,0,0,0.4);
+  --shadow-lg: 0 16px 56px rgba(0,0,0,0.5);
 
   --sidebar-w: 264px;
-  --topbar-h: 68px;
+  --topbar-h: 56px;
 
   color-scheme: dark;
 }
 
 :root[data-theme="light"] {
-  --bg: #FBF8F2;
+  --bg: #DAD9D8;
   --bg-elevated: #FFFFFF;
   --surface: #FFFFFF;
-  --surface-hover: #F6F1E7;
-  --raised: #F3EDE0;
-  --border: #E4DBC8;
-  --border-soft: #EBE3D2;
-  --text: #221D14;
-  --text-dim: #6B6250;
-  --text-faint: #948A76;
-  --accent: #B3781A;
-  --accent-strong: #97640F;
+  --surface-hover: #F1F0EF;
+  --raised: #E7E6E5;
+  --border: #C7C6C5;
+  --border-soft: #D2D1D0;
+  --text: #0A0A0A;
+  --text-dim: #4B4B4A;
+  --text-faint: #7A7A79;
+
+  --accent: #0A0A0A;
+  --accent-strong: #000000;
   --on-accent: #FFFFFF;
-  --accent-soft: rgba(179, 120, 26, 0.10);
-  --teal: #2E8079;
-  --teal-soft: rgba(46, 128, 121, 0.10);
-  --danger: #B14B37;
-  --danger-soft: rgba(177, 75, 55, 0.08);
-  --ok: #3C8556;
-  --ok-soft: rgba(60, 133, 86, 0.08);
+  --accent-soft: rgba(10, 10, 10, 0.06);
+  --teal: #0A0A0A;
+  --teal-soft: rgba(10, 10, 10, 0.06);
+  --danger: #8A4A42;
+  --danger-soft: rgba(138, 74, 66, 0.08);
+  --ok: #4C6E52;
+  --ok-soft: rgba(76, 110, 82, 0.08);
   color-scheme: light;
 }
 
@@ -173,12 +190,20 @@ a { color: var(--accent-strong); }
   margin-bottom: var(--space-6);
   padding: 0 var(--space-2);
 }
+/* Lens mark — a camera-aperture motif (ring, inner ring, center stop) built
+   from plain divs rather than raster art, so it stays crisp at any size and
+   costs nothing extra to theme. Replaces the old letter-tile/gradient mark. */
 .brand-mark {
-  width: 36px; height: 36px; border-radius: 10px;
-  background: linear-gradient(135deg, var(--accent), var(--teal));
-  display: flex; align-items: center; justify-content: center;
-  font-family: var(--font-display); font-weight: 700; color: var(--on-accent); font-size: 18px;
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 2px solid var(--text);
+  position: relative;
   flex-shrink: 0;
+}
+.brand-mark::before {
+  content: ""; position: absolute; inset: 6px; border-radius: 50%; border: 1.5px solid var(--text-dim);
+}
+.brand-mark::after {
+  content: ""; position: absolute; inset: 13px; border-radius: 50%; background: var(--text);
 }
 .brand-name { font-family: var(--font-display); font-size: 17px; font-weight: 600; color: var(--text); line-height: 1.2; }
 .brand-sub { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; }
@@ -200,7 +225,10 @@ a { color: var(--accent-strong); }
   transition: background 0.12s ease, color 0.12s ease;
 }
 .nav-item:hover { background: var(--surface-hover); color: var(--text); }
-.nav-item.active { background: var(--accent-soft); color: var(--accent-strong); font-weight: 600; }
+.nav-item.active {
+  background: var(--accent-soft); color: var(--accent-strong); font-weight: 600;
+  box-shadow: inset 2px 0 0 var(--text);
+}
 .nav-item .nav-icon { font-size: 17px; width: 22px; text-align: center; flex-shrink: 0; }
 .nav-item .nav-badge {
   margin-left: auto; font-size: 11px; padding: 1px 7px; border-radius: 999px;
@@ -361,6 +389,87 @@ textarea.field { resize: vertical; font-family: var(--font-body); }
 .icon-btn:hover { border-color: var(--text-faint); }
 .icon-btn.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 
+/* ---------- Gallery: borderless model tiles + tooltip icon-picker ---------- */
+
+/* Grid thumbnails — no card box around a rotating object. Depth comes from
+   a soft shadow and a hover lift, not a border. */
+.gallery-tile {
+  cursor: pointer;
+  background: transparent;
+  transition: transform 0.18s ease, opacity 0.18s ease;
+}
+.gallery-tile:hover { transform: translateY(-4px); }
+.gallery-tile:hover model-viewer,
+.gallery-tile:hover img,
+.gallery-tile:hover video { filter: brightness(1.04); }
+.gallery-tile model-viewer,
+.gallery-tile img,
+.gallery-tile video {
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  transition: filter 0.18s ease, box-shadow 0.18s ease;
+}
+.gallery-tile:hover model-viewer,
+.gallery-tile:hover img,
+.gallery-tile:hover video { box-shadow: var(--shadow-md); }
+
+/* Focused overlay's close control — a bare icon, no ring/border, so nothing
+   in the borderless view reads as a "box". */
+.gallery-close-btn {
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.72);
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.gallery-close-btn:hover { background: rgba(255, 255, 255, 0.09); color: #fff; }
+
+/* Asset icon-picker (replaces the old <select>): a row of type icons, one
+   per asset, with a floating tooltip on hover/focus instead of relying on
+   the browser's native title tooltip. */
+.asset-picker-item {
+  position: relative;
+  width: 42px; height: 42px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--raised);
+  color: var(--text-dim);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
+}
+.asset-picker-item:hover { border-color: var(--text-faint); color: var(--text); }
+.asset-picker-item.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.asset-picker-dot {
+  position: absolute; top: 4px; right: 4px;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor; opacity: 0.7;
+}
+.asset-picker-item[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 9px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: var(--bg-elevated);
+  color: var(--text);
+  border: 1px solid var(--border-soft);
+  padding: 6px 11px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  box-shadow: var(--shadow-md);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+  z-index: 20;
+}
+.asset-picker-item[data-tooltip]:hover::after,
+.asset-picker-item[data-tooltip]:focus-visible::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
 .kbd-hint { font-size: 12px; color: var(--text-faint); }
 
 /* mobile nav overrides — declared after base .nav-list/.nav-item so they win the cascade */
@@ -378,4 +487,21 @@ textarea.field { resize: vertical; font-family: var(--font-body); }
   }
   .nav-item .nav-icon { font-size: 19px; width: auto; }
   .nav-item .nav-badge { display: none; }
+}
+
+/* ---------- camera-language motifs (used sparingly, per the design system: a
+   hero panel, an era-shift compare, a step counter — never on every card) ---------- */
+.filmstrip-divider {
+  height: 8px;
+  background-image: repeating-linear-gradient(90deg, var(--text) 0 6px, transparent 6px 13px);
+  opacity: 0.12;
+  border: none;
+  margin: var(--space-5) 0;
+}
+.slate-number {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
+  color: var(--text-faint);
 }

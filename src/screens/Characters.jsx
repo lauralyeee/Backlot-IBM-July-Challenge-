@@ -1,22 +1,18 @@
 import { useState, useRef, useEffect } from "react";
-import { generateAsset, ask, generatePortrait } from "../lib/api";
-import { offlineAnswer, offlineAsset } from "../lib/generation";
-import { speak, stopSpeaking, voiceSupported, recognitionSupported, startListening } from "../lib/voice";
+import { generateAsset, ask, generatePortrait, designCharacterVoice, confirmCharacterVoice } from "../lib/api";
+import { offlineAsset } from "../lib/generation";
+import { speakAsCharacterOrFallback, stopSpeaking, voiceSupported } from "../lib/voice";
 import { portraitUrl, preloadExpressions, hasPortrait } from "../lib/portrait";
-import { Chip, Field, Btn, Busy, EmptyState } from "../components/ui";
-import { IconMic, IconPlus } from "../components/Icons";
+import { Field, Chip, Btn, Busy, EmptyState } from "../components/ui";
+import { IconMic, IconPlus, IconPerson, IconImage, IconRefresh, IconSpeaker, IconPlay, IconChevronDown, IconChevronUp } from "../components/Icons";
 import AssetCard from "../components/AssetCard";
-
-const SUGGESTED = [
-  "What is the most dangerous place here?",
-  "Who has the most to lose?",
-  "What does everyone get wrong about this world?",
-  "What happened in the earliest era?",
-];
 
 export default function Characters({ world, assets, addAsset }) {
   const characters = assets.filter((a) => a.type === "character");
-  const [mode, setMode] = useState("lore");
+  // "Ask about the world" now lives on the World Book screen -- this screen
+  // is purely for chatting with characters, so the selected id always
+  // points at one (or is null when there's no cast yet).
+  const [mode, setMode] = useState(characters[0] ? String(characters[0].id) : null);
   const [threads, setThreads] = useState({});
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -30,10 +26,13 @@ export default function Characters({ world, assets, addAsset }) {
   const [traitPersonality, setTraitPersonality] = useState("");
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [speaking, setSpeaking] = useState(false);
-  const [listening, setListening] = useState(false);
   const [portraitBusy, setPortraitBusy] = useState(false);
+  const [voiceBusy, setVoiceBusy] = useState(false);
+  const [voicePreview, setVoicePreview] = useState(null); // { voiceDescription, voiceId, voiceName, audioBase64 }
+  const [triedVoiceIds, setTriedVoiceIds] = useState([]); // so "try again" doesn't repeat a voice
+  const [voiceConfirmBusy, setVoiceConfirmBusy] = useState(false);
+  const previewAudioRef = useRef(null);
   const scrollRef = useRef(null);
-  const recRef = useRef(null);
   const thread = threads[mode] || [];
   const activeChar = characters.find((c) => String(c.id) === mode);
 
@@ -74,27 +73,70 @@ export default function Characters({ world, assets, addAsset }) {
   useEffect(() => {
     stopSpeaking();
     setSpeaking(false);
+    setVoicePreview(null);
+    setTriedVoiceIds([]);
   }, [mode]);
 
   function speakLine(text) {
-    speak(text, activeChar?.faction, world.dialects, {
+    // Uses the character's cast AI voice if one exists, falling back to
+    // Web Speech automatically (no cast yet, Gemini quota exhausted,
+    // network error) -- see speakAsCharacterOrFallback() in lib/voice.js.
+    speakAsCharacterOrFallback(world.id, activeChar, text, world.dialects, {
       onStart: () => setSpeaking(true),
       onEnd: () => setSpeaking(false),
     });
   }
 
-  function toggleListening() {
-    if (listening) {
-      recRef.current?.stop();
-      setListening(false);
-      return;
+  // Voice casting -- mirrors makePortrait()'s shape: generate/preview,
+  // regenerate as many times as wanted, nothing persisted until confirmed.
+  function playVoicePreview(b64) {
+    previewAudioRef.current?.pause();
+    const audio = new Audio(`data:audio/wav;base64,${b64}`);
+    previewAudioRef.current = audio;
+    audio.play().catch(() => {});
+  }
+
+  async function castVoice() {
+    if (!activeChar || voiceBusy) return;
+    setVoiceBusy(true);
+    try {
+      // Excludes voices already previewed this casting session so
+      // "try again" actually gives a different one, not the same match.
+      const res = await designCharacterVoice(world.id, activeChar.id, triedVoiceIds);
+      setVoicePreview({
+        voiceDescription: res.voiceDescription,
+        voiceId: res.voiceId,
+        voiceName: res.voiceName,
+        audioBase64: res.audioBase64,
+      });
+      setTriedVoiceIds((ids) => [...ids, res.voiceId]);
+      playVoicePreview(res.audioBase64);
+    } catch (_e) {
+      // non-fatal -- chat still works with Web Speech if casting fails
     }
-    setListening(true);
-    recRef.current = startListening({
-      onResult: (transcript) => send(transcript),
-      onEnd: () => setListening(false),
-      onError: () => setListening(false),
-    });
+    setVoiceBusy(false);
+  }
+
+  async function confirmVoice() {
+    if (!activeChar || !voicePreview || voiceConfirmBusy) return;
+    setVoiceConfirmBusy(true);
+    try {
+      const res = await confirmCharacterVoice(
+        world.id, activeChar.id, voicePreview.voiceId, voicePreview.voiceDescription
+      );
+      addAsset(res.asset);
+      setVoicePreview(null);
+      setTriedVoiceIds([]);
+    } catch (_e) {
+      // leave the preview up so Confirm can be retried
+    }
+    setVoiceConfirmBusy(false);
+  }
+
+  function discardVoicePreview() {
+    previewAudioRef.current?.pause();
+    setVoicePreview(null);
+    setTriedVoiceIds([]);
   }
 
   async function makePortrait() {
@@ -142,35 +184,34 @@ export default function Characters({ world, assets, addAsset }) {
 
   async function send(textOverride) {
     const q = (textOverride ?? draft).trim();
-    if (!q) return;
+    if (!q || !activeChar) return;
     const next = [...thread, { role: "user", text: q }];
     setThreads({ ...threads, [mode]: next });
     setDraft(""); setBusy(true);
     try {
       const res = await ask(world.id, mode, q, next.slice(0, -1));
       setThreads((t) => ({ ...t, [mode]: [...next, { role: "ai", text: res.reply, emotion: res.emotion || "neutral" }] }));
-      if (autoSpeak && mode !== "lore" && voiceSupported()) speakLine(res.reply);
+      if (autoSpeak && voiceSupported()) speakLine(res.reply);
     } catch (e) {
-      const fallback = mode === "lore"
-        ? offlineAnswer(q, assets)
-        : `${activeChar?.title || "They"} says nothing — the service is unreachable right now (${e.message}).`;
+      const fallback = `${activeChar?.title || "They"} says nothing — the service is unreachable right now (${e.message}).`;
       setThreads((t) => ({ ...t, [mode]: [...next, { role: "ai", text: fallback }] }));
     }
     setBusy(false);
   }
 
   return (
-    <div className="fade-in" style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 24, height: "calc(100vh - var(--topbar-h) - var(--space-6) * 2)" }} id="chars-grid">
+    <div className="fade-in" style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 24, height: "calc(100vh - var(--space-6) * 2)" }} id="chars-grid">
       <div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
         <div style={{ marginBottom: 14 }}>
-          <h1 style={{ fontSize: 22, marginBottom: 4 }}>Characters</h1>
-          <p style={{ fontSize: 13.5, color: "var(--text-dim)" }}>Ask about the world, or chat with anyone you've created.</p>
+          <h1 style={{ fontSize: 28, marginBottom: 6 }}>Characters</h1>
+          <p style={{ fontSize: 13.5, color: "var(--text-dim)" }}>Chat with anyone you've created — pick someone from your cast, or generate someone new.</p>
         </div>
         <Field
+          area
+          rows={3}
           value={npcPrompt}
           onChange={(e) => setNpcPrompt(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && !genBusy && generateNpc()}
-          placeholder="Or describe a character…"
+          placeholder="Describe a character — as much or as little as you want…"
           style={{ marginBottom: 8 }}
         />
         <button
@@ -180,30 +221,24 @@ export default function Characters({ world, assets, addAsset }) {
           style={{
             background: "none", border: "none", cursor: "pointer", textAlign: "left",
             color: "var(--accent-strong)", fontSize: 12.5, padding: "0 2px", marginBottom: 8,
+            display: "inline-flex", alignItems: "center", gap: 5,
           }}
         >
-          {showTraits ? "▾ Hide details" : "▸ Pin down details (gender, age, looks, personality)"}
+          {showTraits ? <IconChevronUp width={12} height={12} /> : <IconChevronDown width={12} height={12} />}
+          {showTraits ? "Hide details" : "Pin down details (gender, age, looks, personality)"}
         </button>
         {showTraits && (
           <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
             <Field value={traitGender} onChange={(e) => setTraitGender(e.target.value)} placeholder="Gender (blank = AI decides)" />
-            <Field value={traitAge} onChange={(e) => setTraitAge(e.target.value)} placeholder="Age (e.g. 17, mid-40s, ancient)" />
-            <Field area rows={2} value={traitAppearance} onChange={(e) => setTraitAppearance(e.target.value)} placeholder="Appearance — also feeds their portrait" />
-            <Field area rows={2} value={traitPersonality} onChange={(e) => setTraitPersonality(e.target.value)} placeholder="Personality / characteristics" />
+            <Field value={traitAge} onChange={(e) => setTraitAge(e.target.value)} placeholder="Age, e.g. 17, mid-40s, ancient (blank = AI decides)" />
+            <Field area rows={2} value={traitAppearance} onChange={(e) => setTraitAppearance(e.target.value)} placeholder="Appearance — also feeds their portrait (blank = AI decides)" />
+            <Field area rows={2} value={traitPersonality} onChange={(e) => setTraitPersonality(e.target.value)} placeholder="Personality / characteristics (blank = AI decides)" />
           </div>
         )}
-        <Btn variant="primary" onClick={generateNpc} disabled={genBusy} title="Create a new NPC using the description and details above" style={{ marginBottom: 14, width: "100%", justifyContent: "center" }}>
+        <Btn variant="primary" onClick={generateNpc} disabled={genBusy} title="Create a new character using the description and details above" style={{ marginBottom: 14, width: "100%", justifyContent: "center" }}>
           <IconPlus width={16} height={16} /> {genBusy ? "Creating…" : "Generate a new character"}
         </Btn>
         <div style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
-          <button
-            onClick={() => setMode("lore")}
-            className={`nav-item ${mode === "lore" ? "active" : ""}`}
-            title="Ask questions answered only from your World Book"
-            style={{ background: mode === "lore" ? "var(--accent-soft)" : "var(--surface)", border: "1px solid var(--border-soft)" }}
-          >
-            🌍 Ask about the world
-          </button>
           {characters.length === 0 && (
             <p style={{ fontSize: 13, color: "var(--text-faint)", padding: "12px 4px" }}>No characters yet — generate one above to start a conversation.</p>
           )}
@@ -215,161 +250,180 @@ export default function Characters({ world, assets, addAsset }) {
               title={`Chat with ${c.title}`}
               style={{ background: mode === String(c.id) ? "var(--accent-soft)" : "var(--surface)", border: "1px solid var(--border-soft)" }}
             >
-              🧑 {c.title}
+              <IconPerson width={15} height={15} /> {c.title}
             </button>
           ))}
         </div>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
-        {mode !== "lore" && activeChar && (
-          <div className="card" style={{ marginBottom: 14, padding: 14, display: "flex", gap: 14, alignItems: "flex-start" }}>
-            <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-              {hasPortrait(activeChar) ? (
-                <>
-                  <div className={`portrait-frame ${speaking ? "talking" : ""} ${busy ? "pondering" : ""} ${imgState === "loading" ? "img-loading" : ""}`}>
-                    {imgState !== "error" ? (
-                      <img
-                        key={`${activeChar.id}-${effExpression}-${retryNonce}`}
-                        src={headerUrl}
-                        alt={`${activeChar.title} — ${effExpression}`}
-                        className="portrait-img"
-                        title={`Expression: ${effExpression} — click to view full size`}
-                        style={{ cursor: "pointer" }}
-                        onClick={() => window.open(headerUrl, "_blank", "noopener")}
-                        onLoad={() => setImgState("ok")}
-                        onError={() => {
-                          if (effExpression !== "neutral") {
-                            setExprOverride("neutral");
-                            setImgState("loading");
-                          } else {
-                            setImgState("error");
-                          }
-                        }}
-                      />
-                    ) : (
-                      <div className="portrait-error">
-                        <div style={{ fontSize: 20 }}>🖼️</div>
-                        <div style={{ fontSize: 11, lineHeight: 1.35, padding: "0 8px", textAlign: "center" }}>
-                          Image service is busy (rate limit) — wait ~15s
+        {!activeChar ? (
+          <div className="card" style={{ flex: 1, display: "flex" }}>
+            <EmptyState icon={IconPerson} title="No character selected" text="Generate a character on the left, or pick one from your cast, to start a conversation." />
+          </div>
+        ) : (
+          <>
+            <div className="card" style={{ marginBottom: 14, padding: 14, display: "flex", gap: 14, alignItems: "flex-start" }}>
+              <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                {hasPortrait(activeChar) ? (
+                  <>
+                    <div className={`portrait-frame ${speaking ? "talking" : ""} ${busy ? "pondering" : ""} ${imgState === "loading" ? "img-loading" : ""}`}>
+                      {imgState !== "error" ? (
+                        <img
+                          key={`${activeChar.id}-${effExpression}-${retryNonce}`}
+                          src={headerUrl}
+                          alt={`${activeChar.title} — ${effExpression}`}
+                          className="portrait-img"
+                          title={`Expression: ${effExpression} — click to view full size`}
+                          style={{ cursor: "pointer" }}
+                          onClick={() => window.open(headerUrl, "_blank", "noopener")}
+                          onLoad={() => setImgState("ok")}
+                          onError={() => {
+                            if (effExpression !== "neutral") {
+                              setExprOverride("neutral");
+                              setImgState("loading");
+                            } else {
+                              setImgState("error");
+                            }
+                          }}
+                        />
+                      ) : (
+                        <div className="portrait-error">
+                          <IconImage width={22} height={22} style={{ opacity: 0.6 }} />
+                          <div style={{ fontSize: 11, lineHeight: 1.35, padding: "0 8px", textAlign: "center" }}>
+                            Image service is busy (rate limit) — wait ~15s
+                          </div>
+                          <Btn small onClick={() => { setImgState("loading"); setRetryNonce((n) => n + 1); }} title="Try loading the portrait again">
+                            Retry
+                          </Btn>
                         </div>
-                        <Btn small onClick={() => { setImgState("loading"); setRetryNonce((n) => n + 1); }} title="Try loading the portrait again">
-                          Retry
-                        </Btn>
-                      </div>
-                    )}
-                  </div>
-                  <button
-                    className="icon-btn"
-                    style={{ width: 24, height: 24, fontSize: 12 }}
-                    onClick={makePortrait}
-                    disabled={portraitBusy}
-                    title="Repaint this portrait (new face)"
-                    aria-label="Regenerate portrait"
-                  >
-                    {portraitBusy ? "…" : "↻"}
-                  </button>
-                </>
-              ) : (
-                <Btn small onClick={makePortrait} disabled={portraitBusy} title="Generate a portrait for this character">
-                  {portraitBusy ? "Painting…" : "🎨 Portrait"}
-                </Btn>
-              )}
-            </div>
-            <div style={{ fontSize: 13.5, color: "var(--text-dim)", lineHeight: 1.5, flex: 1 }}>
-              <strong style={{ color: "var(--text)" }}>{activeChar.title}</strong> · {activeChar.faction} · {activeChar.era} — {activeChar.content}
-              {voiceSupported() && (
-                <div style={{ marginTop: 8 }}>
-                  <Chip
-                    active={autoSpeak}
-                    onClick={() => {
-                      if (autoSpeak) stopSpeaking();
-                      setAutoSpeak(!autoSpeak);
-                    }}
-                    title="Automatically read this character's replies aloud"
-                  >
-                    🔊 Speak replies aloud
-                  </Chip>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {mode === "lore" && thread.length === 0 && (
-          <div style={{ marginBottom: 14, display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {SUGGESTED.map((s) => <Chip key={s} onClick={() => send(s)}>{s}</Chip>)}
-          </div>
-        )}
-
-        <div ref={scrollRef} className="card" style={{ flex: 1, overflowY: "auto", marginBottom: 12, minHeight: 200 }}>
-          {thread.length === 0 && (
-            <EmptyState
-              icon={mode === "lore" ? "💬" : "🧑"}
-              title={mode === "lore" ? "Ask anything about your world" : `Say hello to ${activeChar?.title}`}
-              text={mode === "lore" ? "Answers come only from what's in your World Book." : "They'll reply in character, consistent with your canon."}
-            />
-          )}
-          {thread.map((m, i) => (
-            <div key={i} style={{ marginBottom: 16, display: "flex", flexDirection: "column", alignItems: m.role === "user" ? "flex-end" : "flex-start" }}>
-              <div style={{ fontSize: 11.5, color: "var(--text-faint)", marginBottom: 3 }}>
-                {m.role === "user" ? "You" : mode === "lore" ? world.personaLabel : activeChar?.title}
-              </div>
-              <div style={{ display: "flex", alignItems: "flex-end", gap: 8, maxWidth: "85%" }}>
-                {m.role === "ai" && mode !== "lore" && hasPortrait(activeChar) && (
-                  // Always the neutral variant: it's the one URL guaranteed to
-                  // be warm in the browser cache (the header loads it first),
-                  // so bubble avatars never spend rate-limit budget of their
-                  // own. Hidden entirely if it somehow still fails — a broken
-                  // icon is worse than no avatar.
-                  <img
-                    src={portraitUrl(activeChar, "neutral")}
-                    alt=""
-                    className="bubble-avatar"
-                    onError={(e) => { e.currentTarget.style.display = "none"; }}
-                  />
-                )}
-                <div style={{
-                  fontSize: 14.5, lineHeight: 1.6, color: "var(--text)",
-                  background: m.role === "user" ? "var(--accent-soft)" : "var(--raised)",
-                  padding: "10px 14px", borderRadius: 12,
-                  display: "flex", alignItems: "center", gap: 8,
-                }}>
-                  {m.text}
-                  {m.role === "ai" && mode !== "lore" && voiceSupported() && (
+                      )}
+                    </div>
                     <button
                       className="icon-btn"
-                      style={{ width: 26, height: 26, flexShrink: 0 }}
-                      onClick={() => speakLine(m.text)}
-                      aria-label="Hear this line"
-                      title="Hear this line spoken in the faction's voice"
+                      style={{ width: 24, height: 24, fontSize: 12 }}
+                      onClick={makePortrait}
+                      disabled={portraitBusy}
+                      title="Repaint this portrait (new face)"
+                      aria-label="Regenerate portrait"
                     >
-                      <IconMic width={13} height={13} />
+                      {portraitBusy ? "…" : <IconRefresh width={13} height={13} />}
                     </button>
-                  )}
-                </div>
+                  </>
+                ) : (
+                  <Btn small onClick={makePortrait} disabled={portraitBusy} title="Generate a portrait for this character">
+                    <IconImage width={14} height={14} /> {portraitBusy ? "Painting…" : "Portrait"}
+                  </Btn>
+                )}
+              </div>
+              <div style={{ fontSize: 13.5, color: "var(--text-dim)", lineHeight: 1.5, flex: 1 }}>
+                <strong style={{ color: "var(--text)" }}>{activeChar.title}</strong> · {activeChar.faction} · {activeChar.era} — {activeChar.content}
+                {voiceSupported() && (
+                  <div style={{ marginTop: 8 }}>
+                    <Chip
+                      active={autoSpeak}
+                      onClick={() => {
+                        if (autoSpeak) stopSpeaking();
+                        setAutoSpeak(!autoSpeak);
+                      }}
+                      title="Automatically read this character's replies aloud"
+                    >
+                      <IconSpeaker width={13} height={13} /> Speak replies aloud
+                    </Chip>
+                  </div>
+                )}
+                {voiceSupported() && (
+                  <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    {!activeChar.voiceId && !voicePreview && (
+                      <Btn small onClick={castVoice} disabled={voiceBusy} title="Generate an AI voice for this character — preview it before it's used">
+                        <IconMic width={13} height={13} /> {voiceBusy ? "Casting…" : "Cast a voice"}
+                      </Btn>
+                    )}
+                    {voicePreview && (
+                      <>
+                        <Btn small onClick={() => playVoicePreview(voicePreview.audioBase64)} title={`Play this voice preview again — voice "${voicePreview.voiceName}"`}>
+                          <IconPlay width={12} height={12} /> Preview{voicePreview.voiceName ? ` (${voicePreview.voiceName})` : ""}
+                        </Btn>
+                        <Btn small variant="primary" onClick={confirmVoice} disabled={voiceConfirmBusy} title="Use this voice for all of this character's replies from now on">
+                          {voiceConfirmBusy ? "Saving…" : "Use this voice"}
+                        </Btn>
+                        <Btn small onClick={castVoice} disabled={voiceBusy} title="Not quite right — try a different take">
+                          <IconRefresh width={13} height={13} /> {voiceBusy ? "…" : "Try again"}
+                        </Btn>
+                        <Btn small onClick={discardVoicePreview} title="Discard this preview">
+                          Cancel
+                        </Btn>
+                      </>
+                    )}
+                    {activeChar.voiceId && !voicePreview && (
+                      <Btn small onClick={castVoice} disabled={voiceBusy} title="Recast this character's voice — generates a new take to preview before it replaces the current one">
+                        <IconMic width={13} height={13} /> {voiceBusy ? "Casting…" : "Recast voice"}
+                      </Btn>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
-          ))}
-          {busy && <Busy label="thinking…" />}
-        </div>
 
-        <div style={{ display: "flex", gap: 8 }}>
-          {mode !== "lore" && recognitionSupported() && (
-            <Btn
-              onClick={toggleListening}
-              disabled={busy}
-              variant={listening ? "primary" : undefined}
-              style={listening ? { animation: "listenpulse 1.2s ease-in-out infinite" } : undefined}
-              title={listening ? "Stop listening" : "Speak to this character instead of typing"}
-            >
-              {listening ? "● Listening…" : "🎤"}
-            </Btn>
-          )}
-          <Field value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()}
-            placeholder={mode === "lore" ? "Type your question…" : listening ? "Listening — just talk…" : "Say something…"} />
-          <Btn variant="primary" onClick={() => send()} disabled={busy || !draft.trim()} title="Send your message">Send</Btn>
-        </div>
+            <div ref={scrollRef} className="card" style={{ flex: 1, overflowY: "auto", marginBottom: 12, minHeight: 200 }}>
+              {thread.length === 0 && (
+                <EmptyState
+                  icon={IconPerson}
+                  title={`Say hello to ${activeChar.title}`}
+                  text="They'll reply in character, consistent with your canon."
+                />
+              )}
+              {thread.map((m, i) => (
+                <div key={i} style={{ marginBottom: 16, display: "flex", flexDirection: "column", alignItems: m.role === "user" ? "flex-end" : "flex-start" }}>
+                  <div style={{ fontSize: 11.5, color: "var(--text-faint)", marginBottom: 3 }}>
+                    {m.role === "user" ? "You" : activeChar.title}
+                  </div>
+                  <div style={{ display: "flex", alignItems: "flex-end", gap: 8, maxWidth: "85%" }}>
+                    {m.role === "ai" && hasPortrait(activeChar) && (
+                      // Always the neutral variant: it's the one URL guaranteed to
+                      // be warm in the browser cache (the header loads it first),
+                      // so bubble avatars never spend rate-limit budget of their
+                      // own. Hidden entirely if it somehow still fails — a broken
+                      // icon is worse than no avatar.
+                      <img
+                        src={portraitUrl(activeChar, "neutral")}
+                        alt=""
+                        className="bubble-avatar"
+                        onError={(e) => { e.currentTarget.style.display = "none"; }}
+                      />
+                    )}
+                    <div style={{
+                      fontSize: 14.5, lineHeight: 1.6, color: "var(--text)",
+                      background: m.role === "user" ? "var(--accent-soft)" : "var(--raised)",
+                      padding: "10px 14px", borderRadius: 12,
+                      display: "flex", alignItems: "center", gap: 8,
+                    }}>
+                      {m.text}
+                      {m.role === "ai" && voiceSupported() && (
+                        <button
+                          className="icon-btn"
+                          style={{ width: 26, height: 26, flexShrink: 0 }}
+                          onClick={() => speakLine(m.text)}
+                          aria-label="Hear this line"
+                          title="Hear this line spoken in this character's voice"
+                        >
+                          <IconMic width={13} height={13} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {busy && <Busy label="thinking…" />}
+            </div>
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <Field value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && send()}
+                placeholder="Say something…" />
+              <Btn variant="primary" onClick={() => send()} disabled={busy || !draft.trim()} title="Send your message">Send</Btn>
+            </div>
+          </>
+        )}
       </div>
 
       <style>{`
@@ -406,7 +460,6 @@ export default function Characters({ world, assets, addAsset }) {
           from { box-shadow: 0 0 4px 1px var(--accent-soft); }
           to   { box-shadow: 0 0 16px 5px var(--accent-soft); }
         }
-        @keyframes listenpulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
       `}</style>
     </div>
   );
