@@ -27,15 +27,23 @@ from generation import TYPES
 EXTRACT_TYPES = {"characters": "character", "locations": "location", "props": "lore"}
 
 
-# ── Docling file conversion (PDF/DOCX -> markdown) ───────────────────────────
+# ── File conversion (Docling for PDF/DOCX, direct decode for plain text) ─────
 #
 # Feeds the SAME extraction pipeline below (extraction_system_prompt/
-# extraction_user_prompt, normalize_extraction) as the paste path -- Docling
-# only ever produces markdown text, which main.py's /ingest/file route hands
-# to the shared staging helper exactly like pasted text from /ingest. No
+# extraction_user_prompt, normalize_extraction) as the paste path -- both
+# paths end up as plain text, which main.py's /ingest/file route hands to
+# the shared staging helper exactly like pasted text from /ingest. No
 # changes to the review/commit flow are needed.
 
-SUPPORTED_UPLOAD_EXTENSIONS = {".pdf", ".docx"}
+# PDF/DOCX need Docling to pull text out of a binary layout. TXT and Fountain
+# (a plain-text screenplay markup format -- scene headings, character cues,
+# and dialogue are just conventionally-capitalized lines, no binary encoding
+# involved) are already text, so they're decoded directly instead of being
+# routed through Docling at all. Mirrored client-side in Import.jsx as
+# DOCLING_EXTENSIONS / PLAIN_TEXT_EXTENSIONS.
+DOCLING_UPLOAD_EXTENSIONS = {".pdf", ".docx"}
+PLAIN_TEXT_UPLOAD_EXTENSIONS = {".txt", ".fountain"}
+SUPPORTED_UPLOAD_EXTENSIONS = DOCLING_UPLOAD_EXTENSIONS | PLAIN_TEXT_UPLOAD_EXTENSIONS
 
 _converter_instance = None
 
@@ -81,6 +89,19 @@ def convert_upload_to_text(filename: str, data: bytes) -> str:
         raise RuntimeError(f"Docling couldn't parse this file: {e}") from e
 
     return result.document.export_to_markdown()
+
+
+def decode_plain_text_upload(data: bytes) -> str:
+    """Decode a .txt/.fountain upload's raw bytes directly -- no Docling
+    involved, since both formats are already plain text. Falls back to
+    latin-1 (which never raises) if the file isn't valid UTF-8, rather than
+    failing the whole extraction over an encoding mismatch in a screenplay
+    file that likely came from an older tool.
+    """
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        return data.decode("latin-1")
 
 
 def extraction_system_prompt(world: dict) -> str:

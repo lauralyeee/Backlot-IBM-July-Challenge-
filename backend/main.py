@@ -654,29 +654,34 @@ async def ingest_document(world_id: str, body: IngestRequest):
 
 @app.post("/api/worlds/{world_id}/ingest/file")
 async def ingest_file(world_id: str, file: UploadFile = File(...), title: str = Form("")):
-    """Docling companion to /ingest: same read-only staging as the paste
-    path, but the source text comes from an uploaded PDF/DOCX. IBM Docling
-    parses the document here; IBM Granite (inside _stage_extraction) extracts
-    the structured canon — two named IBM technologies in one pipeline.
+    """Companion to /ingest: same read-only staging as the paste path, but
+    the source text comes from an uploaded file. PDF/DOCX go through IBM
+    Docling to pull text out of the binary layout; TXT/Fountain are already
+    plain text (Fountain is a plain-text screenplay markup format) so they're
+    decoded directly with no Docling step. Either way, IBM Granite (inside
+    _stage_extraction) extracts the structured canon from the resulting text.
     """
     world = _require_world(world_id)
 
     ext = os.path.splitext(file.filename or "")[1].lower()
     if ext not in ing.SUPPORTED_UPLOAD_EXTENSIONS:
-        raise HTTPException(400, f"Unsupported file type '{ext or 'unknown'}'. Upload a PDF or DOCX.")
+        raise HTTPException(400, f"Unsupported file type '{ext or 'unknown'}'. Upload a PDF, DOCX, TXT, or Fountain file.")
 
     data = await file.read()
     if not data:
         raise HTTPException(400, "Uploaded file is empty")
 
     try:
-        text = ing.convert_upload_to_text(file.filename, data)
+        if ext in ing.PLAIN_TEXT_UPLOAD_EXTENSIONS:
+            text = ing.decode_plain_text_upload(data)
+        else:
+            text = ing.convert_upload_to_text(file.filename, data)
     except RuntimeError as e:
         raise HTTPException(422, str(e))
 
     text = text.strip()
     if not text:
-        raise HTTPException(422, "Docling couldn't find any text in this file")
+        raise HTTPException(422, "Couldn't find any text in this file")
 
     return await _stage_extraction(world_id, world, text, title or file.filename)
 
