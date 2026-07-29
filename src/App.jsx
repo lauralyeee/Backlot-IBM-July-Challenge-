@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { ROLES } from "./lib/worldData";
 import { createWorld, getWorld, patchWorld, listAssets, saveAsset, deleteAsset, describeEras } from "./lib/api";
+import { setCurrentScreen } from "./lib/currentScreen";
 import Sidebar from "./components/Sidebar";
 import Onboarding from "./screens/Onboarding";
 import Home from "./screens/Home";
@@ -34,6 +35,13 @@ export default function App() {
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", mode);
   }, [mode]);
+
+  // Report the current screen to AssistantChat.jsx (mounted as a sibling,
+  // not a child — see src/lib/currentScreen.js) so the floating widget can
+  // tailor its suggestions/answers to what the writer is actually looking at.
+  useEffect(() => {
+    setCurrentScreen(loading ? "loading" : !world ? "onboarding" : tab);
+  }, [loading, world, tab]);
 
   // Bootstrap: load world + assets from backend on mount
   useEffect(() => {

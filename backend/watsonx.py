@@ -129,7 +129,97 @@ async def _call_chat(
     return text
 
 
+async def _call_chat_stream(client: httpx.AsyncClient, model: str, messages: list[dict], max_tokens: int):
+    """Streaming counterpart to _call_chat(): hits watsonx.ai's SSE chat
+    endpoint and yields text deltas as they arrive, instead of returning
+    the full reply in one shot."""
+    import json as _json
+
+    token = await _get_token(client)
+    got_any = False
+    async with client.stream(
+        "POST",
+        f"{WX_BASE}/ml/v1/text/chat_stream?version=2024-05-31",
+        json={
+            "model_id": model,
+            "project_id": WATSONX_PROJECT_ID,
+            "messages": messages,
+            "parameters": {
+                "max_new_tokens": max_tokens,
+                "time_limit": 30000,
+            },
+        },
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Accept": "text/event-stream",
+        },
+        timeout=60,
+    ) as resp:
+        if not resp.is_success:
+            body = await resp.aread()
+            raise RuntimeError(f"status {resp.status_code}: {body.decode(errors='ignore')[:300]}")
+        async for line in resp.aiter_lines():
+            if not line or not line.startswith("data:"):
+                continue
+            payload = line[len("data:"):].strip()
+            if not payload or payload == "[DONE]":
+                continue
+            try:
+                data = _json.loads(payload)
+            except ValueError:
+                continue
+            if data.get("errors"):
+                raise RuntimeError((data["errors"][0] or {}).get("message", "stream error"))
+            choices = data.get("choices") or []
+            if not choices:
+                continue
+            delta = (choices[0].get("delta") or {}).get("content", "")
+            if delta:
+                got_any = True
+                yield delta
+    if not got_any:
+        raise RuntimeError("empty streamed response from model")
+
+
 _last_good_model: str | None = None
+
+
+async def generate_messages_stream(messages: list[dict], max_tokens: int = 500):
+    """Streaming counterpart to generate_messages(): yields text deltas as
+    they arrive instead of waiting for and returning the full reply.
+
+    Falls back to the next model in MODEL_CHAIN only if a model fails
+    *before* yielding any text. Once a model has started streaming real
+    content, a later mid-stream failure just ends the generator (the caller
+    already has whatever text arrived) rather than restarting a different
+    model, which would show up as the reply abruptly resetting/duplicating
+    on screen.
+    """
+    global _last_good_model
+    order = (
+        [_last_good_model] + [m for m in MODEL_CHAIN if m != _last_good_model]
+        if _last_good_model
+        else MODEL_CHAIN
+    )
+    last_error: Exception | None = None
+
+    async with httpx.AsyncClient() as client:
+        for model in order:
+            started = False
+            try:
+                async for delta in _call_chat_stream(client, model, messages, max_tokens):
+                    started = True
+                    _last_good_model = model
+                    yield delta
+                return
+            except Exception as exc:
+                last_error = exc
+                if started:
+                    raise
+                continue  # nothing streamed yet for this model — safe to try the next one
+
+    raise RuntimeError(f"{last_error} — tried {len(order)} models")
 
 
 async def generate_messages(messages: list[dict], max_tokens: int = 1000) -> str:

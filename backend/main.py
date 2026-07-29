@@ -16,7 +16,10 @@ Endpoints:
   POST /api/worlds/{id}/ingest                      script/doc → extracted proposals (read-only, Feature 1)
   POST /api/worlds/{id}/ingest/commit               persist writer-approved extracted entries
   POST /api/worlds/{id}/ingest/update/{asset_id}    overwrite an existing asset from a matched extraction
-  POST /api/worlds/{id}/ingest/file                 Docling: PDF/DOCX upload -> extracted proposals (same shape as /ingest)
+  POST /api/worlds/{id}/ingest/file                 Docling: PDF/DOCX (or plain-text TXT/Fountain) upload -> extracted proposals (same shape as /ingest)
+  GET  /api/worlds/{id}/documents                   list past imports, most-recent-first
+  POST /api/worlds/{id}/ingest/relationships/commit  persist writer-approved relationships from a staged extraction
+  GET  /api/worlds/{id}/relationships                list persisted relationships for a world
   POST /api/worlds/{id}/export         compile assets → Markdown document (read-only, Feature 2)
   POST /api/worlds/{id}/eras/rename    rename an era, cascading to every asset tagged with it
   POST /api/worlds/{id}/eras/remove    remove an era (optionally merging its assets into another)
@@ -31,6 +34,7 @@ Endpoints:
   DELETE /api/worlds/{id}/assets/{aid}/model3d         remove an asset's 3D concept model
   GET  /api/ping                       test watsonx connection
   GET  /api/models                     list available foundation models
+  POST /api/widget-chat                general-purpose floating assistant widget (not world-grounded, streams via SSE)
 """
 
 from __future__ import annotations
@@ -46,6 +50,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, BackgroundTasks, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -169,6 +174,16 @@ class AskRequest(BaseModel):
     history: list[dict] = []     # [{role, text}, …] for character chat
 
 
+class WidgetChatMessage(BaseModel):
+    role: str                    # "user" | "assistant"
+    content: str
+
+
+class WidgetChatRequest(BaseModel):
+    messages: list[WidgetChatMessage]
+    screen: str | None = None    # current app tab/screen id, e.g. "import" — see Sidebar.jsx nav ids
+
+
 class AuditRequest(BaseModel):
     pass  # no body needed — uses all assets for the world
 
@@ -218,6 +233,18 @@ class CommitRequest(BaseModel):
 class UpdateFromExtractionRequest(BaseModel):
     document: DocumentIn
     item: AssetIn
+
+
+class RelationshipIn(BaseModel):
+    id: str
+    a: str
+    b: str
+    context: str = ""
+
+
+class RelationshipsCommitRequest(BaseModel):
+    document: DocumentIn
+    relationships: list[RelationshipIn] = []
 
 
 class AssetPatchRequest(BaseModel):
@@ -578,20 +605,30 @@ async def _stage_extraction(world_id: str, world: dict, text: str, title: str) -
     """Shared by /ingest (pasted text) and /ingest/file (Docling-converted
     text): runs extraction, normalizes it, and diffs against existing World
     Book assets. Read-only — nothing is written until /ingest/commit.
+
+    Long documents are split into overlapping chunks (ing.chunk_text) and
+    extracted independently, then unioned back together (ing.merge_extractions)
+    — a single extraction call has a fixed max_tokens ceiling that a
+    genuinely long script/treatment can blow past in one pass.
     """
     offline = False
-    try:
-        raw_text = await wx.generate(
-            ing.extraction_system_prompt(world),
-            ing.extraction_user_prompt(text, world),
-            max_tokens=1800,
-        )
-        raw = wx.parse_json(raw_text)
-    except Exception:
-        raw = ing.offline_extraction(text, world)
-        offline = True
+    chunks = ing.chunk_text(text) or [text]
 
-    extraction = ing.normalize_extraction(raw, world)
+    per_chunk: list[dict] = []
+    for chunk in chunks:
+        try:
+            raw_text = await wx.generate(
+                ing.extraction_system_prompt(world),
+                ing.extraction_user_prompt(chunk, world),
+                max_tokens=1800,
+            )
+            raw = wx.parse_json(raw_text)
+        except Exception:
+            raw = ing.offline_extraction(chunk, world)
+            offline = True
+        per_chunk.append(ing.normalize_extraction(raw, world))
+
+    extraction = ing.merge_extractions(per_chunk)
 
     # The document is described here but NOT inserted — it's created lazily on
     # first commit, so abandoned extractions don't leave orphan rows behind.
@@ -611,20 +648,37 @@ async def _stage_extraction(world_id: str, world: dict, text: str, title: str) -
         for raw_item in extraction.get(category, []):
             item = ing.normalize_extracted_item(raw_item, world, asset_type, index)
             index += 1
-            existing = db.find_asset_by_name(world_id, item["title"], asset_type)
-            if existing:
-                # Name collision with established canon — surface both versions
-                # side by side and let the writer decide. Nothing is overwritten.
-                matches.append({"existing": existing, "extracted": item})
+            match = db.find_asset_matches(world_id, item["title"], asset_type)
+            if match:
+                # Name collision (exact or fuzzy) with established canon —
+                # surface both versions side by side and let the writer
+                # decide. Nothing is overwritten.
+                matches.append({"existing": match["asset"], "extracted": item, "confidence": match["confidence"]})
             else:
                 proposed.append(item)
+
+    # Timeline markers now flow through the exact same proposed/matches diff
+    # as characters/locations/props, reshaped into "event" assets — no
+    # separate, inert display path for them anymore.
+    for raw_marker in extraction.get("timelineMarkers", []):
+        item = ing.normalize_timeline_marker(raw_marker, world, index)
+        index += 1
+        match = db.find_asset_matches(world_id, item["title"], "event")
+        if match:
+            matches.append({"existing": match["asset"], "extracted": item, "confidence": match["confidence"]})
+        else:
+            proposed.append(item)
+
+    relationships = extraction.get("relationships", [])
+    for i, rel in enumerate(relationships):
+        rel["id"] = f"rel-{int(time.time() * 1000)}-{i}-{random.randint(0, 999)}"
 
     result = {
         "document": document,
         "proposed": proposed,
         "matches": matches,
-        "timelineMarkers": extraction.get("timelineMarkers", []),
-        "relationships": extraction.get("relationships", []),
+        "relationships": relationships,
+        "chunkCount": len(chunks),
     }
     if offline:
         result["offline"] = True
@@ -653,20 +707,24 @@ async def ingest_file(world_id: str, file: UploadFile = File(...), title: str = 
 
     ext = os.path.splitext(file.filename or "")[1].lower()
     if ext not in ing.SUPPORTED_UPLOAD_EXTENSIONS:
-        raise HTTPException(400, f"Unsupported file type '{ext or 'unknown'}' — upload a PDF or DOCX.")
+        raise HTTPException(400, f"Unsupported file type '{ext or 'unknown'}' — upload a PDF, DOCX, TXT, or Fountain file.")
 
     data = await file.read()
     if not data:
         raise HTTPException(400, "Uploaded file is empty")
 
-    try:
-        text = ing.convert_upload_to_text(file.filename, data)
-    except RuntimeError as e:
-        raise HTTPException(422, str(e))
+    # .txt/.fountain are already plain text — skip Docling entirely for them.
+    if ext in ing.PLAIN_TEXT_UPLOAD_EXTENSIONS:
+        text = data.decode("utf-8", errors="ignore")
+    else:
+        try:
+            text = ing.convert_upload_to_text(file.filename, data)
+        except RuntimeError as e:
+            raise HTTPException(422, str(e))
 
     text = text.strip()
     if not text:
-        raise HTTPException(422, "Docling couldn't find any text in this file")
+        raise HTTPException(422, "Couldn't find any text in this file")
 
     return await _stage_extraction(world_id, world, text, title or file.filename)
 
@@ -738,6 +796,51 @@ def update_from_extraction(world_id: str, asset_id: int, body: UpdateFromExtract
 
     result = db.update_asset(asset_id, data)
     return {"updated": result}
+
+
+@app.get("/api/worlds/{world_id}/documents")
+def list_documents(world_id: str):
+    """Surface past imports (Feature 1 built the storage, nothing read it back
+    until now). Most-recent-first; feeds Import.jsx's "Past imports" card."""
+    _require_world(world_id)
+    return db.list_documents(world_id)
+
+
+@app.post("/api/worlds/{world_id}/ingest/relationships/commit", status_code=201)
+def commit_relationships(world_id: str, body: RelationshipsCommitRequest):
+    """Persist writer-approved relationships from a staged extraction.
+    Idempotent document creation mirrors commit_ingested/update_from_extraction."""
+    _require_world(world_id)
+    if not body.relationships:
+        raise HTTPException(400, "no relationships to commit")
+    doc = body.document
+    if not db.get_document(doc.id):
+        db.create_document({
+            "id": doc.id,
+            "world_id": world_id,
+            "title": doc.title,
+            "raw_text": doc.rawText,
+            "created_at": doc.createdAt,
+        })
+    saved = [
+        db.create_relationship({
+            "id": rel.id,
+            "world_id": world_id,
+            "asset_a_title": rel.a,
+            "asset_b_title": rel.b,
+            "context": rel.context,
+            "source_document_id": doc.id,
+            "created_at": int(time.time() * 1000),
+        })
+        for rel in body.relationships
+    ]
+    return {"created": saved}
+
+
+@app.get("/api/worlds/{world_id}/relationships")
+def get_relationships(world_id: str):
+    _require_world(world_id)
+    return db.list_relationships(world_id)
 
 
 # ── Export endpoint (Feature 2: assets → Markdown document) ─────────────────
@@ -1669,6 +1772,109 @@ async def ask(world_id: str, body: AskRequest):
         if body.mode == "lore":
             return {"reply": gen.offline_answer(body.question, assets), "offline": True}
         return {"reply": f"They say nothing — the service is unreachable ({exc}).", "offline": True, "emotion": "neutral"}
+
+
+# ── Floating assistant widget (general-purpose, not world/canon-grounded) ─────
+# Backs src/components/AssistantChat.jsx (mounted on every screen). Distinct
+# from /ask above, which is grounded in a specific world's canon. Uses the
+# same wx.generate_messages() model chain / retry / real IBM key as the rest
+# of the app — no separate credential path, no third-party proxy.
+#
+# The feature list below is sourced from src/App.jsx's TITLES map and
+# src/components/Sidebar.jsx's nav definitions -- keep it in sync with those
+# two files if screens are added/renamed, the same way /ask's canon_block()
+# stays in sync with actual world assets. This grounds the widget in real UI
+# instead of letting the model pattern-match on the app's name and invent
+# plausible-sounding but nonexistent buttons/steps.
+_WIDGET_SYSTEM_PROMPT = (
+    "You are a friendly, concise assistant embedded in the Worldbuilding Co-Pilot app — "
+    "a tool for writers to build and maintain a consistent fictional world (a \"canon\"). "
+    "Answer questions about worldbuilding, writing, and how to use THIS app using only the "
+    "real feature list below. If something isn't listed, say you're not sure rather than "
+    "guessing at UI details (no invented buttons, menus, or steps).\n\n"
+    "Real screens, reachable from the left sidebar:\n"
+    "- Home — a snapshot of the world and quick-start links.\n"
+    "- World Book — search, filter, and edit every canon entry (characters, locations, "
+    "props/lore, events, factions); includes a one-click consistency audit that flags "
+    "contradictions and orphaned references.\n"
+    "- Add to World (Idea Generation group) — the \"gap-filling engine\": type a fragment "
+    "of an idea and it drafts a new, canon-grounded entry (character, location, etc.).\n"
+    "- Characters (Idea Generation group) — generates NPCs and lets the writer chat with "
+    "them in character, consistent with canon.\n"
+    "- Timeline (Idea Generation group) — \"Time-Shift Mode\": re-renders any existing "
+    "entry as it would appear in a different era.\n"
+    "- Import — bring in world data from an existing script or document. Either paste text "
+    "directly or upload a file (.txt/.fountain read directly; .pdf/.docx processed via "
+    "Docling). The app extracts candidate characters, locations, props, events, and "
+    "relationships, then STAGES them for the writer to review and approve before anything "
+    "is added to the World Book — nothing is imported automatically without confirmation. "
+    "Past imports are listed for re-use.\n"
+    "- Export — compiles a filtered selection of canon entries into a shareable Markdown "
+    "document.\n"
+    "- Settings — manage world metadata, roles, eras (rename/remove/merge), and light/dark "
+    "appearance.\n\n"
+    "Keep replies short and plain-spoken unless the person asks for more detail."
+)
+
+# Screen-awareness (kept in sync with src/components/Sidebar.jsx's TOP_NAV /
+# IDEA_GEN_ITEMS / BOTTOM_NAV id->label pairs, plus the two pseudo-screens
+# App.jsx reports before a world exists). Lets the widget tailor answers to
+# what the writer is actually looking at, e.g. "the Import screen you're on
+# now" instead of speaking in the abstract.
+_SCREEN_LABELS: dict[str, str] = {
+    "loading": "a loading screen",
+    "onboarding": "the onboarding flow (no world created yet)",
+    "home": "the Home screen",
+    "canon": "the World Book screen",
+    "gallery": "the Gallery screen (3D models, concept art, video)",
+    "create": "the Add to World screen",
+    "characters": "the Characters screen",
+    "timeline": "the Timeline screen",
+    "import": "the Import screen",
+    "export": "the Export screen",
+    "settings": "the Settings screen",
+}
+
+
+def _widget_system_messages(screen: str | None) -> list[dict]:
+    messages = [wx.chat_message("system", _WIDGET_SYSTEM_PROMPT)]
+    label = _SCREEN_LABELS.get(screen or "")
+    if label:
+        messages.append(
+            wx.chat_message(
+                "system",
+                f"The user is currently on {label} of the app. Prefer answers relevant to "
+                f"that screen when the question is ambiguous, but still answer directly if "
+                f"they ask about something else.",
+            )
+        )
+    return messages
+
+
+@app.post("/api/widget-chat")
+async def widget_chat(body: WidgetChatRequest):
+    messages = _widget_system_messages(body.screen)
+    for m in body.messages:
+        role = "user" if m.role == "user" else "assistant"
+        messages.append(wx.chat_message(role, m.content))
+
+    async def event_stream():
+        got_any = False
+        try:
+            async for delta in wx.generate_messages_stream(messages, max_tokens=500):
+                got_any = True
+                yield f"data: {json.dumps({'delta': delta})}\n\n"
+            yield f"data: {json.dumps({'done': True})}\n\n"
+        except Exception as exc:
+            if not got_any:
+                fallback = f"The assistant is temporarily unavailable ({exc})."
+                yield f"data: {json.dumps({'delta': fallback})}\n\n"
+            # Whether nothing streamed or the model died mid-reply, end the
+            # stream cleanly here rather than raising into StreamingResponse
+            # — the client keeps whatever text already arrived either way.
+            yield f"data: {json.dumps({'done': True, 'offline': True})}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 # ── Diagnostics ───────────────────────────────────────────────────────────────

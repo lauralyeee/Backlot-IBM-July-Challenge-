@@ -170,23 +170,27 @@ export const exportDocument = (worldId, { docType, era = "", faction = "" }) =>
 
 /**
  * Read-only: extracts and diffs, but writes nothing. Approve entries with
- * commitIngested() below to actually add them to the World Book.
+ * commitIngested() below to actually add them to the World Book. Timeline
+ * markers now arrive as "event"-typed entries inside proposed/matches
+ * (each match tagged with a confidence of "exact" or "likely") rather than
+ * their own separate array. Long documents are chunked server-side —
+ * chunkCount reports how many sections it took.
  * @param {string} worldId
  * @param {{text: string, title?: string}} doc
- * @returns {{ document, proposed, matches, timelineMarkers, relationships, offline? }}
+ * @returns {{ document, proposed, matches, relationships, chunkCount, offline? }}
  */
 export const ingestText = (worldId, doc) =>
   req("POST", `/worlds/${worldId}/ingest`, { text: doc.text, title: doc.title || "Untitled document" });
 
 /**
  * Docling companion to ingestText: same read-only staging, but the source
- * text comes from an uploaded PDF/DOCX file instead of pasted text. Uses
- * FormData directly (not the shared req() helper, which always JSON-encodes)
- * so the browser sets the correct multipart boundary itself.
+ * text comes from an uploaded PDF/DOCX/TXT/Fountain file instead of pasted
+ * text. Uses FormData directly (not the shared req() helper, which always
+ * JSON-encodes) so the browser sets the correct multipart boundary itself.
  * @param {string} worldId
  * @param {File} file
  * @param {string} [title]
- * @returns {{ document, proposed, matches, timelineMarkers, relationships, offline? }}
+ * @returns {{ document, proposed, matches, relationships, chunkCount, offline? }}
  */
 export async function ingestFile(worldId, file, title) {
   const formData = new FormData();
@@ -219,6 +223,32 @@ export const commitIngested = (worldId, document, assets) =>
  */
 export const updateIngestedAsset = (worldId, assetId, document, item) =>
   req("POST", `/worlds/${worldId}/ingest/update/${assetId}`, { document, item });
+
+/**
+ * List past imports for a world, most-recent-first. Feeds Import.jsx's
+ * "Past imports" card (preview + re-extract).
+ * @param {string} worldId
+ * @returns {Array<{id, worldId, title, rawText, createdAt}>}
+ */
+export const listDocuments = (worldId) => req("GET", `/worlds/${worldId}/documents`);
+
+/**
+ * Persist writer-approved relationships extracted from a staged document.
+ * @param {string} worldId
+ * @param {object} document       the staged document object returned by ingestText
+ * @param {Array<{id, a, b, context}>} relationships
+ * @returns {{ created: Array }}
+ */
+export const commitRelationships = (worldId, document, relationships) =>
+  req("POST", `/worlds/${worldId}/ingest/relationships/commit`, { document, relationships });
+
+/**
+ * List all persisted relationships for a world (used by Characters.jsx to
+ * show a character's known relationships).
+ * @param {string} worldId
+ * @returns {Array<{id, worldId, a, b, context, sourceDocumentId, createdAt}>}
+ */
+export const listRelationships = (worldId) => req("GET", `/worlds/${worldId}/relationships`);
 
 // ── Generation ─────────────────────────────────────────────────────────────
 
@@ -302,6 +332,77 @@ export const auditWorld = (worldId) => req("POST", `/worlds/${worldId}/audit`, {
  */
 export const ask = (worldId, mode, question, history = []) =>
   req("POST", `/worlds/${worldId}/ask`, { mode, question, history });
+
+// ── Floating assistant widget ───────────────────────────────────────────────
+
+/**
+ * General-purpose (not world/canon-grounded) chat for the floating widget
+ * (src/components/AssistantChat.jsx). Uses the same server-side IBM Granite
+ * credentials and model fallback as every other AI feature in this app.
+ *
+ * Streams via SSE (backend/main.py's /api/widget-chat returns
+ * text/event-stream) so the panel can render tokens as they arrive instead
+ * of waiting for the full reply. `onDelta` is called with each text chunk
+ * as it comes in; the promise resolves with the full concatenated reply
+ * once the stream ends.
+ *
+ * A non-2xx response, a dropped connection, or any other transport-level
+ * failure rejects the promise — that's the network case AssistantChat.jsx
+ * auto-retries once before showing an error. A model-side failure (all
+ * models in the fallback chain down) is NOT an exception here: the backend
+ * already turns that into a friendly "temporarily unavailable" reply and
+ * marks it `offline`, same as the rest of the app's AI features.
+ *
+ * @param {Array<{role: "user"|"assistant", content: string}>} messages
+ * @param {string} [screen]  current app tab/screen id (see Sidebar.jsx nav
+ *   ids), so the assistant can tailor answers to what's on screen
+ * @param {(deltaText: string) => void} [onDelta]  called per streamed chunk
+ * @returns {Promise<{ reply: string, offline?: boolean }>}
+ */
+export async function widgetChat(messages, screen, onDelta) {
+  const res = await fetch(`${BASE}/widget-chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages, ...(screen ? { screen } : {}) }),
+  });
+  if (!res.ok || !res.body) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`API POST /widget-chat → ${res.status}: ${text}`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let reply = "";
+  let offline = false;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const events = buffer.split("\n\n");
+    buffer = events.pop() ?? ""; // last entry may be an incomplete event — keep it for next read
+
+    for (const raw of events) {
+      const line = raw.trim();
+      if (!line.startsWith("data:")) continue;
+      let evt;
+      try {
+        evt = JSON.parse(line.slice(5).trim());
+      } catch {
+        continue; // malformed chunk — skip rather than corrupt the reply
+      }
+      if (evt.delta) {
+        reply += evt.delta;
+        onDelta?.(evt.delta);
+      }
+      if (evt.offline) offline = true;
+    }
+  }
+
+  return { reply, offline };
+}
 
 // ── Diagnostics ────────────────────────────────────────────────────────────
 
