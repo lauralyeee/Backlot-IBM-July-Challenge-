@@ -3,7 +3,7 @@
 // audience: screenwriters, producers, and writers), the ids themselves
 // stay the same so existing worlds' saved roles keep resolving correctly.
 export const ROLES = [
-  { id: "writer", label: "Screenwriter", blurb: "Features, pilots, and episodic series", voice: "script-ready lore — scene-actionable detail and dialogue-aware character voice" },
+  { id: "writer", label: "Screenwriter", blurb: "Features, pilots, and episodic series", voice: "script-ready lore: scene-actionable detail and dialogue-aware character voice" },
   { id: "game", label: "Producer", blurb: "Development, packaging, and pitching", voice: "packaging-ready canon with clear hooks and stakes suited for pitching to buyers" },
   { id: "media", label: "Novelist", blurb: "Novels, series, and short fiction", voice: "prose-ready lore with narrative texture" },
 ];
@@ -29,7 +29,7 @@ export const PERSONAS = [
     seed: [
       { title: "The Hallworth House", type: "location", era: "Before", faction: "The Hallworth Family", mood: "familiar", content: "A three-bedroom house on a street that's changed more than the house has. The kitchen table still has the water ring from a party in 2003 that nobody talks about anymore." },
       { title: "Dana Hallworth", type: "character", era: "Before", faction: "The Hallworth Family", mood: "tired", content: "The one who stayed. Manages her mother's medications, her brother's silences, and a job she's too proud to complain about. Keeps a running list of things she'll say once, someday, to somebody." },
-      { title: "The Phone Call at 6 a.m.", type: "event", era: "The Turning Point", faction: "—", mood: "unsettled", content: "The call that starts the part of the story where nothing gets to stay the same. Nobody in the family remembers the exact words afterward — only that they were standing when they heard them." },
+      { title: "The Phone Call at 6 a.m.", type: "event", era: "The Turning Point", faction: "—", mood: "unsettled", content: "The call that starts the part of the story where nothing gets to stay the same. Nobody in the family remembers the exact words afterward, only that they were standing when they heard them." },
     ],
   },
   {
@@ -50,15 +50,15 @@ export const PERSONAS = [
       { label: "A wrong-number text thread", text: "A months-long text thread that started as a wrong number and became the most honest relationship either of them has" },
     ],
     seed: [
-      { title: "The Merrow Street Café", type: "location", era: "Before They Meet", faction: "The Downtown Crowd", mood: "cozy", content: "A corner café with mismatched chairs and a chalkboard menu that never gets updated. Regulars claim the back booth by the window is good luck for first dates — nobody can explain why, they just keep coming back to it." },
+      { title: "The Merrow Street Café", type: "location", era: "Before They Meet", faction: "The Downtown Crowd", mood: "cozy", content: "A corner café with mismatched chairs and a chalkboard menu that never gets updated. Regulars claim the back booth by the window is good luck for first dates. Nobody can explain why, they just keep coming back to it." },
       { title: "Priya Anand", type: "character", era: "Before They Meet", faction: "The Downtown Crowd", mood: "guarded", content: "A freelance illustrator who took over her late aunt's café lease on a whim and hasn't slept properly since. Fiercely loyal to the three regulars she actually likes, and allergic to being asked about her five-year plan." },
-      { title: "The Note Left on the Register", type: "event", era: "The Complication", faction: "—", mood: "hopeful", content: "The night a customer left a note instead of a tip — three lines, no name, and a compliment specific enough that Priya has read it a dozen times trying to guess who wrote it." },
+      { title: "The Note Left on the Register", type: "event", era: "The Complication", faction: "—", mood: "hopeful", content: "The night a customer left a note instead of a tip: three lines, no name, and a compliment specific enough that Priya has read it a dozen times trying to guess who wrote it." },
     ],
   },
   {
     id: "thriller",
     label: "Mystery & thriller plotter",
-    desc: "A crime, an investigation, and the secrets that unravel — grounded suspense, nothing supernatural",
+    desc: "A crime, an investigation, and the secrets that unravel: grounded suspense, nothing supernatural",
     eras: ["Before the Crime", "The Investigation", "The Reckoning"],
     nameIdeas: ["Nothing Left Unsaid", "The Last Known Address", "A Quiet Kind of Guilty", "What the Report Left Out"],
     dialects: {
@@ -81,7 +81,7 @@ export const PERSONAS = [
   {
     id: "historical",
     label: "Historical fiction chronicler",
-    desc: "A real or realistic past setting — grounded history, no magic, no invented technology",
+    desc: "A real or realistic past setting: grounded history, no magic, no invented technology",
     eras: ["Rising Tensions", "The Event", "The Aftermath"],
     nameIdeas: ["The Long Correspondence", "What the Harbor Remembers", "A Decent Winter", "The Ones Who Stayed"],
     dialects: {
@@ -113,10 +113,10 @@ export const PERSONAS = [
       "The Tide-Sworn": { style: "clipped, salt-worn, superstitious", rate: 0.95, pitch: 0.7 },
     },
     ideas: [
-      { label: "Ithaca", text: "Ithaca — the small Ionian island kingdom the voyage is trying to reach, ruled by a king who has been away so long the court assumes he is dead" },
-      { label: "Pylos", text: "Pylos — a sandy mainland harbour kingdom where a young traveller arrives seeking news of his missing father from an aging, talkative king" },
-      { label: "Sparta", text: "Sparta — an inland kingdom of hard soldiers, where a returned queen and her husband keep a court full of unspoken history about the war" },
-      { label: "Crete", text: "Crete — a great southern island of ninety cities and older, stranger customs than the mainland remembers" },
+      { label: "Ithaca", text: "Ithaca: the small Ionian island kingdom the voyage is trying to reach, ruled by a king who has been away so long the court assumes he is dead" },
+      { label: "Pylos", text: "Pylos: a sandy mainland harbour kingdom where a young traveller arrives seeking news of his missing father from an aging, talkative king" },
+      { label: "Sparta", text: "Sparta: an inland kingdom of hard soldiers, where a returned queen and her husband keep a court full of unspoken history about the war" },
+      { label: "Crete", text: "Crete: a great southern island of ninety cities and older, stranger customs than the mainland remembers" },
       { label: "The Cyclops' cave", text: "A cave on a wild island where a one-eyed herdsman keeps sheep and a cruel idea of hospitality" },
       { label: "The Sirens' strait", text: "A narrow passage where singing carries across the water, promising every sailor the one thing they most want to hear" },
       { label: "Circe's hall", text: "An island hall where a sorceress hosts sailors generously and changes what they are before they notice" },
@@ -125,9 +125,9 @@ export const PERSONAS = [
       { label: "The suitors' feast", text: "A great hall where dozens of suitors eat through an absent king's stores, waiting for his wife to choose one of them" },
     ],
     seed: [
-      { title: "Ithaca", type: "location", era: "The Homecoming", faction: "House of the Absent King", mood: "yearning", content: "A small, steep island in the western sea — goats, olive terraces, one good harbour. It is not rich and never was, but it is the fixed point every route in this world bends toward. The palace has been run by a waiting household for nineteen years." },
+      { title: "Ithaca", type: "location", era: "The Homecoming", faction: "House of the Absent King", mood: "yearning", content: "A small, steep island in the western sea: goats, olive terraces, one good harbour. It is not rich and never was, but it is the fixed point every route in this world bends toward. The palace has been run by a waiting household for nineteen years." },
       { title: "Pylos", type: "location", era: "Before the War", faction: "The Sandy Court", mood: "hospitable", content: "A mainland harbour kingdom of long beaches and cattle wealth, famed for hosting guests properly. Its old king remembers every ship that sailed to the war and every man who did not come back, and will tell you about all of them." },
-      { title: "The Isle of Unstrung Bows", type: "location", era: "The Wandering", faction: "The Tide-Sworn", mood: "deceptive", content: "An island whose harbour welcomes every ship with feasts and garlands. No crew that stays past the third sunset has been seen again, and the harbourmaster keeps a wall of unstrung bows — one for each vanished vessel." },
+      { title: "The Isle of Unstrung Bows", type: "location", era: "The Wandering", faction: "The Tide-Sworn", mood: "deceptive", content: "An island whose harbour welcomes every ship with feasts and garlands. No crew that stays past the third sunset has been seen again, and the harbourmaster keeps a wall of unstrung bows, one for each vanished vessel." },
       { title: "Kessa of the Nine Currents", type: "character", era: "The Wandering", faction: "The Tide-Sworn", mood: "cunning", content: "A navigator said to have bargained with a sea-god for knowledge of the nine hidden currents. Each current she uses costs her one true memory of home, and she no longer remembers her mother's face." },
       { title: "The Oath at the Burning Harbour", type: "event", era: "Before the War", faction: "—", mood: "fateful", content: "The night twelve captains swore on a burning ship to return home together or not at all. The gods heard the oath and, as gods do, chose to enforce it literally." },
     ],

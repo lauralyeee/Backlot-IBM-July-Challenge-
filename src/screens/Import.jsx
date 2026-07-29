@@ -1,16 +1,16 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import {
   ingestText, ingestFile, commitIngested, updateIngestedAsset,
-  listDocuments, commitRelationships,
+  listDocuments,
 } from "../lib/api";
-import { TYPE_META } from "../lib/worldData";
+import { TYPES, TYPE_META } from "../lib/worldData";
 import { Field, Btn, Chip, Busy, Banner, Tag, EmptyState } from "../components/ui";
 import {
   IconSpark, IconImport, IconFolder, IconCheck, IconSearch, TypeIcon,
-  IconEdit, IconClock, IconChevronDown, IconChevronUp,
+  IconEdit, IconClock, IconChevronDown,
 } from "../components/Icons";
 
-const SAMPLE_SCRIPT = `EXT. THE OUTER HARBOUR — BEFORE DAWN
+const SAMPLE_SCRIPT = `EXT. THE OUTER HARBOUR - BEFORE DAWN
 
 Fog sits low over the water. A single lamp burns at the end of the stone jetty.
 
@@ -22,7 +22,7 @@ MARETH
     (to herself)
     Three ships out. Two ships back. Same as the last four winters.
 
-A younger figure waits at the jetty's end — DERIN VASK, ship's navigator,
+A younger figure waits at the jetty's end: DERIN VASK, ship's navigator,
 still wearing the salt-stained coat he arrived in.
 
 DERIN
@@ -33,7 +33,7 @@ MARETH
     you're still asking the same question the same way.
 
 She sets the ledger on the stone between them. Inside its cover, stitched flat,
-is a brass tide-key — the only one that still opens the old lockhouse.
+is a brass tide-key: the only one that still opens the old lockhouse.
 
 DERIN
     And this?
@@ -42,13 +42,12 @@ MARETH
     That's how you'll find out. But once you turn it, the harbour will know
     you did.`;
 
-const FILTERS = [
-  { id: "all", label: "All" },
-  { id: "character", label: "Characters" },
-  { id: "location", label: "Locations" },
-  { id: "lore", label: "Props & lore" },
-  { id: "event", label: "Events" },
-];
+// Derived from worldData's TYPES/TYPE_META (the same source WorldBook.jsx
+// filters against) instead of a separate hardcoded list -- keeps Import's
+// categories from drifting out of sync with what the World Book actually
+// has (this previously had its own "Props & lore" label and no "Other"
+// filter at all, even though extracted items can land in either bucket).
+const FILTERS = [{ id: "all", label: "All" }, ...TYPES.map((t) => ({ id: t, label: TYPE_META[t].label }))];
 
 // Left accent bar per type -- monochrome, so differentiated by weight
 // rather than hue (the type icon on each card carries the rest).
@@ -57,6 +56,7 @@ const ACCENT = {
   location: "var(--text-dim)",
   lore: "var(--text-faint)",
   event: "var(--text-dim)",
+  other: "var(--text-faint)",
 };
 
 // Mirrors backend/ingestion.py's SUPPORTED_UPLOAD_EXTENSIONS split -- kept
@@ -140,15 +140,6 @@ function ProposalCard({ item, onApprove, onReject, busy, editing, draft, onStart
   );
 }
 
-function StatCard({ label, value, color }) {
-  return (
-    <div className="card" style={{ padding: 14, textAlign: "center" }}>
-      <div style={{ fontSize: 12.5, color: "var(--text-dim)", fontWeight: 500 }}>{label}</div>
-      <div style={{ fontSize: 24, fontWeight: 700, marginTop: 4, color: color || "var(--text)" }}>{value}</div>
-    </div>
-  );
-}
-
 export default function Import({ world, addAsset }) {
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
@@ -163,7 +154,6 @@ export default function Import({ world, addAsset }) {
   const [filter, setFilter] = useState("all");
   const [pendingIds, setPendingIds] = useState([]);
   const [pendingMatchIds, setPendingMatchIds] = useState([]);
-  const [pendingRelIds, setPendingRelIds] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [editDraft, setEditDraft] = useState(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -199,7 +189,7 @@ export default function Import({ world, addAsset }) {
     setPipelineMode("text");
     setBusyLabel(
       t.length > LONG_DOCUMENT_CHARS
-        ? "Long document — extracting in sections, this can take a bit longer…"
+        ? "Long document: extracting in sections, this can take a bit longer…"
         : "Reading the document and pulling out entries…"
     );
     try {
@@ -207,7 +197,7 @@ export default function Import({ world, addAsset }) {
       setStaged(res);
       setProposed(res.proposed);
       if (res.offline) {
-        setError("Service unavailable — this is a rough offline extraction. Check each entry carefully before adding it.");
+        setError("Service unavailable, so this is a rough offline extraction. Check each entry carefully before adding it.");
       }
     } catch (e) {
       setError(`Extraction failed: ${e.message}`);
@@ -226,7 +216,7 @@ export default function Import({ world, addAsset }) {
     setPipelineMode(usesDocling ? "docling" : "text");
     setBusyLabel(
       usesDocling
-        ? "Parsing with Docling — first run can take a bit longer…"
+        ? "Parsing with Docling: first run can take a bit longer…"
         : "Reading the file and pulling out entries…"
     );
     try {
@@ -234,7 +224,7 @@ export default function Import({ world, addAsset }) {
       setStaged(res);
       setProposed(res.proposed);
       if (res.offline) {
-        setError("Service unavailable — this is a rough offline extraction. Check each entry carefully before adding it.");
+        setError("Service unavailable, so this is a rough offline extraction. Check each entry carefully before adding it.");
       }
     } catch (e) {
       setError(`Extraction failed: ${e.message}`);
@@ -266,7 +256,7 @@ export default function Import({ world, addAsset }) {
     if (!file) return;
     const ext = extOf(file.name);
     if (!DOCLING_EXTENSIONS.has(ext) && !PLAIN_TEXT_EXTENSIONS.has(ext)) {
-      setError(`Unsupported file type '${ext || "unknown"}' — drop a PDF, DOCX, TXT, or Fountain file.`);
+      setError(`Unsupported file type '${ext || "unknown"}'. Drop a PDF, DOCX, TXT, or Fountain file.`);
       return;
     }
     extractFromFile(file);
@@ -344,21 +334,6 @@ export default function Import({ world, addAsset }) {
     setPendingMatchIds((prev) => prev.filter((id) => id !== match.existing.id));
   }
 
-  async function approveRelationships(rels) {
-    const ids = rels.map((r) => r.id);
-    setPendingRelIds((prev) => [...prev, ...ids]);
-    setError("");
-    try {
-      const res = await commitRelationships(world.id, staged.document, rels);
-      setStaged((prev) => ({ ...prev, relationships: prev.relationships.filter((r) => !ids.includes(r.id)) }));
-      setNotice(res.created.length === 1 ? "Saved 1 relationship." : `Saved ${res.created.length} relationships.`);
-      refreshPastImports();
-    } catch (e) {
-      setError(`Couldn't save: ${e.message}`);
-    }
-    setPendingRelIds((prev) => prev.filter((id) => !ids.includes(id)));
-  }
-
   function rerunPastImport(doc) {
     setTitle(doc.title);
     setText(doc.rawText);
@@ -367,17 +342,67 @@ export default function Import({ world, addAsset }) {
   }
 
   return (
-    <div className="fade-in" style={{ display: "grid", gridTemplateColumns: "minmax(0, 420px) minmax(0, 1fr)", gap: 28 }} id="import-grid">
+    <div className="fade-in import-screen">
+      <div className="import-head">
+        <h1 style={{ fontSize: 28, marginBottom: 6 }}>Import</h1>
+        <p>
+          Start from something you’ve already written. Paste a script, treatment,
+          or outline and it’s broken down into entries you can review one by one.
+        </p>
+      </div>
+
+      <div className="import-toolbar">
+        <div className="section-label" style={{ marginBottom: 0 }}>Source document</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <Btn small variant="ghost" onClick={() => { setText(SAMPLE_SCRIPT); setTitle("Sample scene"); }} title="Fill the box with an example scene to try extraction">
+            Load sample
+          </Btn>
+          <button type="button" className="import-past-toggle" onClick={() => setPastImportsOpen((v) => !v)} title="Show documents you've previously extracted from">
+            <IconClock width={14} height={14} /> Past imports{pastImports.length > 0 ? ` · ${pastImports.length}` : ""}
+            <IconChevronDown width={13} height={13} style={{ transform: pastImportsOpen ? "rotate(180deg)" : "none", transition: "transform .15s ease" }} />
+          </button>
+        </div>
+      </div>
+
+      {pastImportsOpen && (
+        <div className="import-past-row">
+          {pastImports.length === 0 && (
+            <p style={{ fontSize: 12.5, color: "var(--text-faint)", margin: 0 }}>Nothing extracted yet. Your past imports will show up here.</p>
+          )}
+          {pastImports.map((doc) => (
+            <div key={doc.id} style={{ border: "1px solid var(--border-soft)", borderRadius: "var(--radius)", padding: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 600 }}>{doc.title}</div>
+                  <div style={{ fontSize: 11.5, color: "var(--text-faint)" }}>{new Date(doc.createdAt).toLocaleString()}</div>
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <Btn small onClick={() => setExpandedImportId((id) => (id === doc.id ? null : doc.id))} title="Preview the raw text of this document">
+                    {expandedImportId === doc.id ? "Hide" : "Preview"}
+                  </Btn>
+                  <Btn small disabled={busy} onClick={() => rerunPastImport(doc)} title="Re-run extraction on this document">
+                    Re-extract
+                  </Btn>
+                </div>
+              </div>
+              {expandedImportId === doc.id && (
+                <pre style={{
+                  marginTop: 10, fontSize: 12, lineHeight: 1.5, color: "var(--text-dim)",
+                  whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: 220, overflowY: "auto",
+                  background: "var(--bg-elevated)", padding: 10, borderRadius: "var(--radius)",
+                }}>
+                  {(doc.rawText || "").slice(0, 2000)}
+                  {(doc.rawText || "").length > 2000 && "…"}
+                </pre>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="import-body">
       {/* ── Left: source document ─────────────────────────────────────── */}
       <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-        <div>
-          <h1 style={{ fontSize: 28, marginBottom: 6 }}>Import</h1>
-          <p style={{ color: "var(--text-dim)", fontSize: 14.5, lineHeight: 1.6 }}>
-            Start from something you’ve already written. Paste a script, treatment,
-            or outline and it’s broken down into entries you can review one by one.
-          </p>
-        </div>
-
         <div
           className="card"
           onDragOver={onDragOverZone}
@@ -385,17 +410,10 @@ export default function Import({ world, addAsset }) {
           onDrop={onDropFile}
           style={isDragOver ? { borderColor: "var(--text)", borderStyle: "dashed" } : undefined}
         >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div className="section-label" style={{ marginBottom: 0 }}>Source document</div>
-            <Btn small variant="ghost" onClick={() => { setText(SAMPLE_SCRIPT); setTitle("Sample scene"); }} title="Fill the box with an example scene to try extraction">
-              Load sample
-            </Btn>
-          </div>
-
           <Field
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Document name — e.g. Episode 3 draft"
+            placeholder="Document name (e.g. Episode 3 draft)"
             style={{ margin: "12px 0" }}
           />
           <Field
@@ -429,7 +447,7 @@ export default function Import({ world, addAsset }) {
               <IconImport width={15} height={15} /> Upload PDF, DOCX, TXT, or Fountain
             </Btn>
             <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
-              PDF/DOCX parsed by IBM Docling; TXT/Fountain read directly — either way, extracted the same way as pasted text.
+              PDF/DOCX parsed by IBM Docling; TXT/Fountain read directly. Either way, it's extracted the same way as pasted text.
             </span>
           </div>
           <input
@@ -441,80 +459,27 @@ export default function Import({ world, addAsset }) {
           />
         </div>
 
-        <div className="card" style={{ padding: 0 }}>
-          <button
-            type="button"
-            onClick={() => setPastImportsOpen((v) => !v)}
-            title="Show documents you've previously extracted from"
-            style={{
-              width: "100%", background: "none", border: "none", cursor: "pointer",
-              display: "flex", alignItems: "center", justifyContent: "space-between",
-              padding: 14, color: "var(--text)", fontSize: 14,
-            }}
-          >
-            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <IconClock width={14} height={14} /> Past imports {pastImports.length > 0 && `(${pastImports.length})`}
-            </span>
-            {pastImportsOpen ? <IconChevronUp width={14} height={14} /> : <IconChevronDown width={14} height={14} />}
-          </button>
-          {pastImportsOpen && (
-            <div style={{ padding: "0 14px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
-              {pastImports.length === 0 && (
-                <p style={{ fontSize: 12.5, color: "var(--text-faint)", margin: 0 }}>Nothing extracted yet — your past imports will show up here.</p>
-              )}
-              {pastImports.map((doc) => (
-                <div key={doc.id} style={{ border: "1px solid var(--border-soft)", borderRadius: "var(--radius)", padding: 10 }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 13.5, fontWeight: 600 }}>{doc.title}</div>
-                      <div style={{ fontSize: 11.5, color: "var(--text-faint)" }}>{new Date(doc.createdAt).toLocaleString()}</div>
-                    </div>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <Btn small onClick={() => setExpandedImportId((id) => (id === doc.id ? null : doc.id))} title="Preview the raw text of this document">
-                        {expandedImportId === doc.id ? "Hide" : "Preview"}
-                      </Btn>
-                      <Btn small disabled={busy} onClick={() => rerunPastImport(doc)} title="Re-run extraction on this document">
-                        Re-extract
-                      </Btn>
-                    </div>
-                  </div>
-                  {expandedImportId === doc.id && (
-                    <pre style={{
-                      marginTop: 10, fontSize: 12, lineHeight: 1.5, color: "var(--text-dim)",
-                      whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: 220, overflowY: "auto",
-                      background: "var(--bg-elevated)", padding: 10, borderRadius: "var(--radius)",
-                    }}>
-                      {(doc.rawText || "").slice(0, 2000)}
-                      {(doc.rawText || "").length > 2000 && "…"}
-                    </pre>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
         <p style={{ fontSize: 12.5, color: "var(--text-faint)", lineHeight: 1.6, margin: 0 }}>
           Nothing is saved to your World Book until you approve it. Extracting is
-          always safe to re-run — it never edits what’s already there.
+          always safe to re-run: it never edits what's already there.
         </p>
       </div>
 
       {/* ── Right: review queue ───────────────────────────────────────── */}
       <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-          <StatCard label="Awaiting review" value={counts.total} />
-          <StatCard label="Characters" value={counts.character} color="var(--accent-strong)" />
-          <StatCard label="Locations" value={counts.location} color="var(--teal)" />
+        <div className="import-stat-strip">
+          <div className="import-stat"><div className="import-stat-label">Awaiting review</div><div className="import-stat-value">{counts.total}</div></div>
+          <div className="import-stat"><div className="import-stat-label">Characters</div><div className="import-stat-value">{counts.character}</div></div>
+          <div className="import-stat"><div className="import-stat-label">Locations</div><div className="import-stat-value">{counts.location}</div></div>
         </div>
 
         <div className="card" style={{ display: "flex", flexDirection: "column", gap: 16, minHeight: 380 }}>
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap", borderBottom: "1px solid var(--border-soft)", paddingBottom: 14 }}>
+          <div className="import-review-head">
             <div>
-              <div style={{ fontFamily: "var(--font-display)", fontSize: 17, fontWeight: 600 }}>Review queue</div>
-              <div style={{ fontSize: 12.5, color: "var(--text-faint)", marginTop: 2 }}>
+              <div className="import-review-label">Review queue</div>
+              <div className="import-review-sub">
                 {staged
-                  ? `From "${staged.document.title}"${staged.chunkCount > 1 ? ` — processed in ${staged.chunkCount} sections` : ""}`
+                  ? `From "${staged.document.title}"${staged.chunkCount > 1 ? `, processed in ${staged.chunkCount} sections` : ""}`
                   : "Extracted entries appear here before they become canon."}
               </div>
             </div>
@@ -598,7 +563,7 @@ export default function Import({ world, addAsset }) {
             <div className="section-label">Already in your World Book ({staged.matches.length})</div>
             <p style={{ fontSize: 13, color: "var(--text-faint)", marginBottom: 12, lineHeight: 1.6 }}>
               These names already exist (some may be close/fuzzy matches, not exact). Compare the
-              two versions below — click "Update existing entry" to replace it with this document's
+              two versions below, then click "Update existing entry" to replace it with this document's
               version, "Merge" to combine both, or leave it alone and edit it yourself later from the World Book.
             </p>
             {error && <Banner tone="danger">{error}</Banner>}
@@ -608,7 +573,7 @@ export default function Import({ world, addAsset }) {
                 <div key={i} style={{ border: "1px solid var(--border-soft)", borderRadius: "var(--radius)", padding: 14 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
                     <div style={{ fontWeight: 600, fontSize: 14.5 }}>{m.existing.title}</div>
-                    {m.confidence === "likely" && <Tag>likely match — check before merging</Tag>}
+                    {m.confidence === "likely" && <Tag>likely match, check before merging</Tag>}
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                     <div>
@@ -633,35 +598,50 @@ export default function Import({ world, addAsset }) {
             </div>
           </div>
         )}
-
-        {staged?.relationships?.length > 0 && (
-          <div className="card">
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-              <div className="section-label" style={{ marginBottom: 0 }}>Relationships ({staged.relationships.length})</div>
-              <Btn small variant="primary" disabled={pendingRelIds.length > 0} onClick={() => approveRelationships(staged.relationships)} title="Save all relationships shown">
-                Save all relationships
-              </Btn>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
-              {staged.relationships.map((r) => (
-                <div key={r.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", border: "1px solid var(--border-soft)", borderRadius: "var(--radius)", padding: 10 }}>
-                  <div style={{ fontSize: 13.5, color: "var(--text-dim)" }}>
-                    <strong style={{ color: "var(--text)" }}>{r.a}</strong>
-                    {" ↔ "}
-                    <strong style={{ color: "var(--text)" }}>{r.b}</strong>
-                    {r.context ? ` — ${r.context}` : ""}
-                  </div>
-                  <Btn small disabled={pendingRelIds.includes(r.id)} onClick={() => approveRelationships([r])} title="Save this relationship">
-                    Approve
-                  </Btn>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+      </div>
       </div>
 
-      <style>{`@media (max-width: 1000px) { #import-grid { grid-template-columns: 1fr !important; } }`}</style>
+      <style>{`
+        .import-screen { display: flex; flex-direction: column; }
+        .import-head p { color: var(--text-dim); font-size: 14.5px; line-height: 1.6; max-width: 640px; margin-top: 6px; }
+
+        .import-toolbar {
+          display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
+          gap: 14px; margin-top: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border-soft);
+        }
+        .import-past-toggle {
+          display: inline-flex; align-items: center; gap: 6px;
+          font-family: var(--font-body); font-size: 13px; font-weight: 500;
+          color: var(--text-dim); background: transparent; border: none; cursor: pointer; padding: 8px 2px;
+        }
+        .import-past-toggle:hover { color: var(--text); }
+        .import-past-row {
+          display: flex; flex-direction: column; gap: 10px;
+          padding: 16px 2px 2px; animation: fadeIn 0.18s ease;
+        }
+
+        .import-body {
+          display: grid; grid-template-columns: minmax(0, 420px) minmax(0, 1fr); gap: 28px;
+          margin-top: 20px;
+        }
+
+        .import-stat-strip {
+          display: flex; border: 1px solid var(--border-soft); border-radius: var(--radius); background: var(--surface); overflow: hidden;
+        }
+        .import-stat { flex: 1; text-align: center; padding: 14px 10px; }
+        .import-stat + .import-stat { border-left: 1px solid var(--border-soft); }
+        .import-stat-label { font-size: 11.5px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+        .import-stat-value { font-family: var(--font-display); font-size: 26px; font-weight: 700; margin-top: 4px; }
+
+        .import-review-head {
+          display: flex; align-items: flex-start; justify-content: space-between;
+          flex-wrap: wrap; gap: 12px; border-bottom: 1px solid var(--border-soft); padding-bottom: 14px;
+        }
+        .import-review-label { font-family: var(--font-display); font-size: 19px; font-weight: 600; }
+        .import-review-sub { font-size: 12.5px; color: var(--text-faint); margin-top: 3px; }
+
+        @media (max-width: 1000px) { .import-body { grid-template-columns: 1fr; } }
+      `}</style>
     </div>
   );
 }

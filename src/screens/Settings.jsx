@@ -24,7 +24,7 @@ export default function Settings({ world, setWorld, mode, toggleTheme, onReset }
     try {
       const res = await pingBackend();
       if (res.ok) {
-        setPing({ ok: true, text: `Connected via ${res.model} — replied "${res.reply}".` });
+        setPing({ ok: true, text: `Connected via ${res.model}, replied "${res.reply}".` });
       } else {
         setPing({ ok: false, text: `No model reachable. ${res.error}` });
       }
@@ -56,7 +56,7 @@ export default function Settings({ world, setWorld, mode, toggleTheme, onReset }
       <div className="card" style={{ marginBottom: 20 }}>
         <h3 style={{ fontSize: 15.5, marginBottom: 6 }}>Connection</h3>
         <p style={{ fontSize: 13.5, color: "var(--text-dim)", marginBottom: 12 }}>
-          If nothing is generating, run this first — it shows whether the problem is the service or your world.
+          If nothing is generating, run this first. It shows whether the problem is the service or your world.
         </p>
         <Btn small onClick={testConnection} disabled={pinging} title="Check whether the AI backend is reachable">{pinging ? "Testing…" : "Test connection"}</Btn>
         {ping && (
@@ -110,8 +110,8 @@ export default function Settings({ world, setWorld, mode, toggleTheme, onReset }
         <h3 style={{ fontSize: 15.5, marginBottom: 6 }}>World archetype</h3>
         <p style={{ fontSize: 13, color: "var(--text-dim)", marginBottom: 10 }}>
           The short label under your world's name in the sidebar, and how the AI refers to its own role while
-          generating ("You are the resident ___ of the world..."). Picking a World style above sets this for you —
-          edit it here to fine-tune the exact wording without changing your eras or starter ideas.
+          generating ("You are the resident ___ of the world..."). Picking a World style above sets this for you.
+          Edit it here to fine-tune the exact wording without changing your eras or starter ideas.
         </p>
         <div style={{ display: "flex", gap: 8 }}>
           <Field value={archetype} onChange={(e) => setArchetype(e.target.value)} placeholder="e.g. Dark-comedy crime thriller" />
@@ -122,9 +122,9 @@ export default function Settings({ world, setWorld, mode, toggleTheme, onReset }
       <div className="card" style={{ marginBottom: 20 }}>
         <h3 style={{ fontSize: 15.5, marginBottom: 6 }}>World premise</h3>
         <p style={{ fontSize: 13, color: "var(--text-dim)", marginBottom: 10 }}>
-          A short summary of what this world is about — every generation and character chat reads this, so it's how the AI knows more than just your world's name.
+          A short summary of what this world is about. Every generation and character chat reads this, so it's how the AI knows more than just your world's name.
         </p>
-        <Field area rows={3} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="A few sentences — genre, setting, what's at stake…" style={{ marginBottom: 10 }} />
+        <Field area rows={3} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="A few sentences: genre, setting, what's at stake…" style={{ marginBottom: 10 }} />
         <Btn small onClick={() => { setWorld({ ...world, description: desc.trim() }); flash(); }} disabled={desc.trim() === (world.description || "")} title="Save this world's premise">Save</Btn>
       </div>
 
@@ -139,7 +139,7 @@ export default function Settings({ world, setWorld, mode, toggleTheme, onReset }
       <div className="card">
         <h3 style={{ fontSize: 15.5, marginBottom: 6, color: "var(--danger)" }}>Danger zone</h3>
         <p style={{ fontSize: 13.5, color: "var(--text-dim)", marginBottom: 12 }}>Clears your world and restarts onboarding.</p>
-        <Btn small onClick={resetWorld} title="Clear this world and start onboarding again — cannot be undone">Reset world</Btn>
+        <Btn small onClick={resetWorld} title="Clear this world and start onboarding again (cannot be undone)">Reset world</Btn>
       </div>
     </div>
   );

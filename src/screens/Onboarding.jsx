@@ -5,11 +5,11 @@ import { IconSun, IconMoon, IconCheck, IconArrowRight, IconDocument, IconPerson,
 import { generateCustomPersona } from "../lib/api";
 
 const CAPABILITIES = [
-  { icon: IconDocument, title: "Gap-Filling Engine", text: "Turn a one-line idea into full, canon-consistent lore." },
-  { icon: IconPerson, title: "Character Generator", text: "Populate your world with characters you can talk to." },
-  { icon: IconMic, title: "Dialect & Voice", text: "Give each faction a distinct, hearable voice." },
-  { icon: IconClock, title: "Time-Shift Mode", text: "See any entry re-rendered in a different era." },
-  { icon: IconTag, title: "Auto-Tagging", text: "Everything is tagged and searchable as your world grows." },
+  { icon: IconDocument, title: "Gap-Filling", text: "One line in, a page of lore out." },
+  { icon: IconPerson, title: "Characters", text: "Arrive backstoried. You can talk to them." },
+  { icon: IconMic, title: "Dialect & Voice", text: "Every faction sounds different." },
+  { icon: IconClock, title: "Time-Shift", text: "Rewind any entry to another era." },
+  { icon: IconTag, title: "Auto-Tag", text: "Tagged quietly as your world grows." },
 ];
 
 // api.js's req() throws an Error whose message is "API POST /path -> 502: <raw body>".
@@ -98,47 +98,43 @@ export default function Onboarding({ onDone, mode, toggleTheme }) {
     }
   };
 
+  const customCharsNeeded = Math.max(0, 10 - customDesc.trim().length);
+
   return (
-    <div style={{ minHeight: "100vh", display: "grid", gridTemplateColumns: "1.1fr 1fr" }} className="onboarding-grid">
-      <div style={{
-        background: "linear-gradient(160deg, var(--bg-elevated), var(--bg))",
-        padding: "56px 64px",
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "center",
-        borderRight: "1px solid var(--border-soft)",
-      }} className="onboarding-pitch">
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 28 }}>
-          <div className="brand-mark" style={{ width: 44, height: 44 }} />
-          <div style={{ fontFamily: "var(--font-display)", fontSize: 15, color: "var(--text-dim)", letterSpacing: "0.02em" }}>Worldbuilding Co-Pilot</div>
+    <div style={{ minHeight: "100vh", position: "relative" }}>
+      <button className="icon-btn" onClick={toggleTheme} style={{ position: "absolute", top: 28, right: 32, zIndex: 5 }} aria-label="Toggle theme" title="Switch between light and dark mode">
+        {mode === "dark" ? <IconSun /> : <IconMoon />}
+      </button>
+
+      <div className="onboarding-hero" style={{ padding: "56px 64px 40px", maxWidth: 720 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 30 }}>
+          <div className="brand-mark" style={{ width: 40, height: 40 }} />
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 15, color: "var(--text-dim)", letterSpacing: "0.02em" }}>Backlot</div>
         </div>
-        <h1 style={{ fontSize: 40, lineHeight: 1.15, marginBottom: 16, maxWidth: 480 }}>
-          Turn fragments into a living, connected story world.
+        <h1 style={{ fontSize: 34, lineHeight: 1.18, marginBottom: 14 }}>
+          Give it a name, a scene, half an idea.
         </h1>
-        <p style={{ fontSize: 16, color: "var(--text-dim)", lineHeight: 1.7, maxWidth: 460, marginBottom: 40 }}>
-          Feed it a sketch, a name, a rough idea. It grows into grounded lore,
-          characters you can talk to, and a world you can walk through different eras —
-          always consistent with what you've already built.
+        <p style={{ fontSize: 15.5, color: "var(--text-dim)", lineHeight: 1.7 }}>
+          It builds the lore around it using what you've already established. Ask to see
+          the same world in a different era, and it still holds together.
         </p>
-        <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-          {CAPABILITIES.map((c) => (
-            <div key={c.title} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
-              <c.icon width={20} height={20} style={{ flexShrink: 0, marginTop: 2, color: "var(--text-dim)" }} />
-              <div>
-                <div style={{ fontWeight: 600, fontSize: 14.5 }}>{c.title}</div>
-                <div style={{ fontSize: 13.5, color: "var(--text-dim)" }}>{c.text}</div>
-              </div>
-            </div>
-          ))}
-        </div>
       </div>
 
-      <div style={{ padding: "56px 64px", display: "flex", flexDirection: "column", justifyContent: "center", position: "relative" }}>
-        <button className="icon-btn" onClick={toggleTheme} style={{ position: "absolute", top: 32, right: 32 }} aria-label="Toggle theme" title="Switch between light and dark mode">
-          {mode === "dark" ? <IconSun /> : <IconMoon />}
-        </button>
+      <hr className="filmstrip-divider" style={{ margin: 0 }} />
+      <div className="cap-reel">
+        {CAPABILITIES.map((c, i) => (
+          <div key={c.title} className="cap-frame">
+            <div className="slate-number cap-slate">{String(i + 1).padStart(2, "0")}</div>
+            <c.icon width={20} height={20} className="cap-icon" />
+            <div className="cap-title">{c.title}</div>
+            <div className="cap-desc">{c.text}</div>
+          </div>
+        ))}
+      </div>
+      <hr className="filmstrip-divider" style={{ margin: 0 }} />
 
-        <div style={{ maxWidth: 440, width: "100%", margin: "0 auto" }}>
+      <div className="onboarding-wizard" style={{ padding: "48px 64px 64px", display: "flex", justifyContent: "center" }}>
+        <div style={{ maxWidth: 640, width: "100%" }}>
           <div style={{ display: "flex", gap: 6, marginBottom: 22 }}>
             {[0, 1, 2].map((i) => (
               <div key={i} style={{ height: 4, flex: 1, borderRadius: 2, background: i <= step ? "var(--accent)" : "var(--border)" }} />
@@ -149,7 +145,7 @@ export default function Onboarding({ onDone, mode, toggleTheme }) {
             <div className="fade-in">
               <div className="section-label">Step 1 of 3</div>
               <h2 style={{ fontSize: 24, marginBottom: 6 }}>What describes you?</h2>
-              <p style={{ color: "var(--text-dim)", fontSize: 14.5, marginBottom: 20 }}>Pick all that apply — wearing several hats is normal, the app blends them.</p>
+              <p style={{ color: "var(--text-dim)", fontSize: 14.5, marginBottom: 20 }}>Pick all that apply. Wearing several hats is normal, the app blends them.</p>
               <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
                 {ROLES.map((r) => (
                   <button
@@ -187,62 +183,87 @@ export default function Onboarding({ onDone, mode, toggleTheme }) {
             <div className="fade-in">
               <div className="section-label">Step 2 of 3</div>
               <h2 style={{ fontSize: 24, marginBottom: 6 }}>What kind of world?</h2>
-              <p style={{ color: "var(--text-dim)", fontSize: 14.5, marginBottom: 20 }}>This sets your starting canon, eras, and voice. You can change it later.</p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
+              <p style={{ color: "var(--text-dim)", fontSize: 14.5, marginBottom: 20 }}>This sets your starting canon, eras, and voice. You can change it later. Hover a card for the full description.</p>
+
+              {/* Three columns of compact cards -- the description is
+                  clipped to one line (full text lives in the native title
+                  tooltip, same pattern the roles step already uses) so eight
+                  presets fit in three short rows instead of running long.
+                  minWidth: 0 on the button below is load-bearing: CSS Grid
+                  items default to min-width: auto, which sizes the track to
+                  the intrinsic min-content of the nowrap description text
+                  (i.e. its full unwrapped length) and blows the grid out
+                  horizontally past the 640px wizard column. minWidth: 0
+                  overrides that so the 1fr tracks actually divide evenly
+                  and the ellipsis on the description can actually engage.
+                  Responsive: drops to 2 columns under 760px, 1 under 480px
+                  -- see the .persona-grid media queries at the bottom of
+                  this file. */}
+              <div className="persona-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginBottom: 12 }}>
                 {PERSONAS.map((p) => (
                   <button
                     key={p.id}
                     onClick={() => handlePickPersona(p)}
                     title={p.desc}
-                    style={{ display: "block", textAlign: "left", padding: "16px 18px", borderRadius: "var(--radius)", border: "1px solid var(--border)", background: "var(--surface)", cursor: "pointer", color: "var(--text)" }}
+                    style={{ display: "block", minWidth: 0, textAlign: "left", padding: "12px 13px", borderRadius: "var(--radius)", border: "1px solid var(--border)", background: "var(--surface)", cursor: "pointer", color: "var(--text)" }}
                   >
-                    <div style={{ fontWeight: 600, fontSize: 15.5 }}>{p.label}</div>
-                    <div style={{ fontSize: 13, color: "var(--text-dim)", marginTop: 2 }}>{p.desc}</div>
+                    <div style={{ fontWeight: 600, fontSize: 13.5, lineHeight: 1.25 }}>{p.label}</div>
+                    <div style={{ fontSize: 11.5, color: "var(--text-dim)", marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.desc}</div>
                   </button>
                 ))}
-
-                {/* 5th option: describe your own world */}
-                <button
-                  onClick={() => setShowCustom((v) => !v)}
-                  title="Describe your own world in a few sentences instead of picking a preset"
-                  style={{
-                    display: "block", textAlign: "left", padding: "16px 18px",
-                    borderRadius: "var(--radius)",
-                    border: `1px solid ${showCustom ? "var(--accent)" : "var(--border)"}`,
-                    background: showCustom ? "var(--accent-soft)" : "var(--surface)",
-                    cursor: "pointer", color: "var(--text)",
-                  }}
-                >
-                  <div style={{ fontWeight: 600, fontSize: 15.5 }}>Describe your own world</div>
-                  <div style={{ fontSize: 13, color: "var(--text-dim)", marginTop: 2 }}>A few sentences — we'll build the structure around your idea</div>
-                </button>
-
-                {showCustom && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "4px 2px" }}>
-                    <textarea
-                      value={customDesc}
-                      onChange={(e) => setCustomDesc(e.target.value)}
-                      placeholder="A few sentences about the world you want — genre, era, what's at stake…"
-                      rows={4}
-                      style={{
-                        width: "100%", boxSizing: "border-box",
-                        padding: "12px 14px", borderRadius: "var(--radius)",
-                        border: "1px solid var(--border)", background: "var(--surface)",
-                        color: "var(--text)", fontSize: 14, lineHeight: 1.6,
-                        resize: "vertical", fontFamily: "inherit",
-                      }}
-                    />
-                    <Btn
-                      variant="primary"
-                      disabled={customDesc.trim().length < 10 || customGenerating}
-                      onClick={handleCustomGenerate}
-                      title="Generate a starting world from your description"
-                    >
-                      {customGenerating ? "Generating…" : "Generate"} <IconArrowRight width={16} height={16} />
-                    </Btn>
-                  </div>
-                )}
               </div>
+
+              {/* Describe your own world -- kept as its own full-width row
+                  rather than a grid cell, so the reveal below it (textarea +
+                  Generate) doesn't have to fight the grid for space. */}
+              <button
+                onClick={() => setShowCustom((v) => !v)}
+                title="Describe your own world in a few sentences instead of picking a preset"
+                style={{
+                  display: "block", width: "100%", textAlign: "left", padding: "16px 18px",
+                  borderRadius: "var(--radius)",
+                  border: `1px solid ${showCustom ? "var(--accent)" : "var(--border)"}`,
+                  background: showCustom ? "var(--accent-soft)" : "var(--surface)",
+                  cursor: "pointer", color: "var(--text)", marginBottom: 24,
+                }}
+              >
+                <div style={{ fontWeight: 600, fontSize: 15.5 }}>Describe your own world</div>
+                <div style={{ fontSize: 13, color: "var(--text-dim)", marginTop: 2 }}>A few sentences: we'll build the structure around your idea</div>
+              </button>
+
+              {showCustom && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "4px 2px", marginBottom: 24 }}>
+                  <textarea
+                    value={customDesc}
+                    onChange={(e) => setCustomDesc(e.target.value)}
+                    placeholder="A few sentences about the world you want: genre, era, what's at stake…"
+                    rows={4}
+                    style={{
+                      width: "100%", boxSizing: "border-box",
+                      padding: "12px 14px", borderRadius: "var(--radius)",
+                      border: "1px solid var(--border)", background: "var(--surface)",
+                      color: "var(--text)", fontSize: 14, lineHeight: 1.6,
+                      resize: "vertical", fontFamily: "inherit",
+                    }}
+                  />
+                  {/* Generate stays disabled under 10 characters -- this line is
+                      the fix for that reading as "broken": it says why, and
+                      counts down live instead of just sitting greyed out. */}
+                  <div style={{ fontSize: 12, color: "var(--text-faint)" }}>
+                    {customCharsNeeded > 0
+                      ? `${customCharsNeeded} more character${customCharsNeeded === 1 ? "" : "s"}, then Generate turns on.`
+                      : " "}
+                  </div>
+                  <Btn
+                    variant="primary"
+                    disabled={customDesc.trim().length < 10 || customGenerating}
+                    onClick={handleCustomGenerate}
+                    title="Generate a starting world from your description"
+                  >
+                    {customGenerating ? "Generating…" : "Generate"} <IconArrowRight width={16} height={16} />
+                  </Btn>
+                </div>
+              )}
               <Btn onClick={() => setStep(0)} title="Back to choosing your roles">Back</Btn>
             </div>
           )}
@@ -258,7 +279,7 @@ export default function Onboarding({ onDone, mode, toggleTheme }) {
                   border: "1px solid var(--border)", borderRadius: "var(--radius)",
                   padding: "10px 14px", marginBottom: 16,
                 }}>
-                  Generated offline — eras and seed entries will be placeholders. You can refine them later.
+                  Generated offline. Eras and seed entries will be placeholders. You can refine them later.
                   {customErrorReason && (
                     <div style={{ marginTop: 6, color: "var(--text-faint)" }}>
                       Reason: {customErrorReason}
@@ -293,9 +314,14 @@ export default function Onboarding({ onDone, mode, toggleTheme }) {
       </div>
 
       <style>{`
-        @media (max-width: 860px) {
-          .onboarding-grid { grid-template-columns: 1fr !important; }
-          .onboarding-pitch { display: none !important; }
+        @media (max-width: 640px) {
+          .onboarding-hero, .onboarding-wizard { padding-left: 26px !important; padding-right: 26px !important; }
+        }
+        @media (max-width: 760px) {
+          .persona-grid { grid-template-columns: repeat(2, 1fr) !important; }
+        }
+        @media (max-width: 480px) {
+          .persona-grid { grid-template-columns: 1fr !important; }
         }
       `}</style>
     </div>

@@ -221,7 +221,7 @@ def offline_asset(idea: str, world: dict, assets: list[dict], force_type: str | 
         "era": _pick(world.get("eras", [""]), seed),
         "faction": related["faction"] if (related and related.get("faction") != "—") else "—",
         "mood": "unsettled",
-        "content": f"{_pick(openers, seed)}: {idea}.{links} Drafted offline — reopen when the service is back.",
+        "content": f"{_pick(openers, seed)}: {idea}.{links} Drafted offline, reopen when the service is back.",
         "offline": True,
         "createdAt": int(time.time() * 1000),
     }
@@ -241,7 +241,7 @@ def offline_answer(question: str, assets: list[dict]) -> str:
     scored = [(a, s) for a, s in scored if s > 0]
     if not scored:
         return (
-            "Nothing in your World Book covers that yet — "
+            "Nothing in your World Book covers that yet, "
             "which makes it a gap worth filling. (Answered offline, from your entries only.)"
         )
     top = "\n\n".join(f"{a['title']}: {a['content']}" for a, _ in scored[:2])
@@ -259,8 +259,8 @@ def offline_audit(assets: list[dict]) -> dict:
                 issue = "Two entries share the same name, which may confuse your canon."
             else:
                 issue = (
-                    f'"{a["title"]}" is used by both a {other["type"]} and a {a["type"]} '
-                    "— easy to mix up when picking an entry elsewhere in the app."
+                    f'"{a["title"]}" is used by both a {other["type"]} and a {a["type"]}, '
+                    "easy to mix up when picking an entry elsewhere in the app."
                 )
             issues.append({
                 "severity": "low",

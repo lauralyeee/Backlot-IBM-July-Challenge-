@@ -1,5 +1,5 @@
 """
-SQLite database layer for the Worldbuilding Co-Pilot.
+SQLite database layer for Backlot.
 Tables: worlds, assets.
 """
 
@@ -70,6 +70,19 @@ def init_db():
                 created_at          INTEGER NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_relationships_world ON relationships(world_id);
+
+            CREATE TABLE IF NOT EXISTS export_versions (
+                id          TEXT PRIMARY KEY,
+                world_id    TEXT NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+                doc_type    TEXT NOT NULL,
+                era         TEXT NOT NULL DEFAULT '',
+                faction     TEXT NOT NULL DEFAULT '',
+                asset_count INTEGER NOT NULL DEFAULT 0,
+                content     TEXT NOT NULL,
+                offline     INTEGER NOT NULL DEFAULT 0,
+                created_at  INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_export_versions_world_doctype ON export_versions(world_id, doc_type);
         """)
         # Migration: add source_asset_id column if it doesn't exist yet
         # (safe to run every startup — ALTER TABLE is a no-op when already present)
@@ -527,5 +540,84 @@ def _row_to_relationship(row) -> dict:
         "b": row["asset_b_title"],
         "context": row["context"],
         "sourceDocumentId": row["source_document_id"],
+        "createdAt": row["created_at"],
+    }
+
+
+# ── Export version history (Export screen: "Version History") ──────────────
+#
+# Every successful /export compile is snapshotted here so writers can page
+# back through earlier drafts of a document type (a re-run with different
+# filters, a re-roll after editing canon, etc.) instead of the generated
+# text vanishing the moment they regenerate or navigate away. Purely
+# additive/read-side-effect-only from the rest of the app's perspective --
+# nothing here is ever read back into canon.
+
+_EXPORT_HISTORY_KEEP = 30  # per world+docType — oldest beyond this are pruned
+
+
+def create_export_version(data: dict) -> dict:
+    with _connect() as conn:
+        conn.execute(
+            """INSERT INTO export_versions (id, world_id, doc_type, era, faction, asset_count, content, offline, created_at)
+               VALUES (:id, :world_id, :doc_type, :era, :faction, :asset_count, :content, :offline, :created_at)""",
+            {
+                "id": data["id"],
+                "world_id": data["world_id"],
+                "doc_type": data["doc_type"],
+                "era": data.get("era", ""),
+                "faction": data.get("faction", ""),
+                "asset_count": data.get("asset_count", 0),
+                "content": data["content"],
+                "offline": 1 if data.get("offline") else 0,
+                "created_at": data["created_at"],
+            },
+        )
+        # Prune anything past the keep-window for this world+docType, oldest
+        # first, so history can't grow unbounded across a long project.
+        stale = conn.execute(
+            """SELECT id FROM export_versions WHERE world_id = ? AND doc_type = ?
+               ORDER BY created_at DESC LIMIT -1 OFFSET ?""",
+            (data["world_id"], data["doc_type"], _EXPORT_HISTORY_KEEP),
+        ).fetchall()
+        if stale:
+            conn.executemany(
+                "DELETE FROM export_versions WHERE id = ?", [(r["id"],) for r in stale]
+            )
+    return get_export_version(data["id"])
+
+
+def get_export_version(version_id: str) -> dict | None:
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM export_versions WHERE id = ?", (version_id,)).fetchone()
+    return _row_to_export_version(row) if row else None
+
+
+def list_export_versions(world_id: str, doc_type: str) -> list[dict]:
+    """Most-recent-first — matches how a version history list is read."""
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM export_versions WHERE world_id = ? AND doc_type = ? ORDER BY created_at DESC",
+            (world_id, doc_type),
+        ).fetchall()
+    return [_row_to_export_version(r) for r in rows]
+
+
+def delete_export_version(version_id: str) -> bool:
+    with _connect() as conn:
+        cur = conn.execute("DELETE FROM export_versions WHERE id = ?", (version_id,))
+    return cur.rowcount > 0
+
+
+def _row_to_export_version(row) -> dict:
+    return {
+        "id": row["id"],
+        "worldId": row["world_id"],
+        "docType": row["doc_type"],
+        "era": row["era"],
+        "faction": row["faction"],
+        "assetCount": row["asset_count"],
+        "content": row["content"],
+        "offline": bool(row["offline"]),
         "createdAt": row["created_at"],
     }

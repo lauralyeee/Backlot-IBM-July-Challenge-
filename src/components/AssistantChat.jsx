@@ -151,7 +151,7 @@ export default function AssistantChat() {
       setSending(false);
       setError(
         isNetworkError
-          ? "Can't reach the app's backend — make sure the FastAPI server is running (see AGENTS.md)."
+          ? "Can't reach the app's backend. Make sure the FastAPI server is running (see AGENTS.md)."
           : e?.message || "Something went wrong reaching the assistant."
       );
       setRetryText(true);
@@ -247,9 +247,8 @@ export default function AssistantChat() {
             {messages.length === 0 && (
               <div style={styles.emptyWrap}>
                 <div style={styles.empty}>
-                  Hey there! I'm your worldbuilding partner. I'm powered by IBM Granite and ready to help you shape
-                  your universe. Ask me anything about your story, or find out how to navigate the app. Here are a
-                  few ideas to jump in:
+                  Hey! I'm here to help with your world, powered by IBM Granite. Ask me about your story, or how
+                  to find your way around the app. A few ideas to get started:
                 </div>
                 <div style={styles.suggestions}>
                   {suggestions.map((s) => (

@@ -23,12 +23,12 @@ export default function Create({ world, assets, addAsset }) {
       setResult(res.asset);
       setGrounding(res.grounding || []);
       setFragment(""); setPicked(null);
-      if (res.offline) setError(`Service unavailable (${res.error}). Saved a local draft instead — reopen it when the service returns.`);
+      if (res.offline) setError(`Service unavailable (${res.error}). Saved a local draft instead, reopen it when the service returns.`);
     } catch (e) {
-      // Network error (backend unreachable) — produce a local draft without hitting API
+      // Network error (backend unreachable) -- produce a local draft without hitting API
       const draft = offlineAsset(fragment, world, assets, null);
       addAsset(draft); setResult(draft); setFragment(""); setPicked(null);
-      setError(`Service unavailable (${e.message}). Saved a local draft instead — reopen it when the service returns.`);
+      setError(`Service unavailable (${e.message}). Saved a local draft instead, reopen it when the service returns.`);
     }
     setBusy(false);
   }
@@ -38,7 +38,7 @@ export default function Create({ world, assets, addAsset }) {
       <div>
         <div style={{ marginBottom: 24 }}>
           <h1 style={{ fontSize: 28, marginBottom: 6 }}>Add to your World</h1>
-          <p style={{ color: "var(--text-dim)", fontSize: 14.5 }}>Pick a starter idea, or write your own — either way it grows into a full entry grounded in your existing canon.</p>
+          <p style={{ color: "var(--text-dim)", fontSize: 14.5 }}>Pick a starter idea, or write your own. Either way it grows into a full entry grounded in your existing canon.</p>
         </div>
 
         {world.ideas && world.ideas.length > 0 && (
@@ -55,7 +55,7 @@ export default function Create({ world, assets, addAsset }) {
         <div className="card">
           <div className="section-label">Or write your own</div>
           <Field area rows={4} value={fragment} onChange={(e) => { setFragment(e.target.value); setPicked(null); }}
-            placeholder="Any small idea works — a name, a place, one sentence." />
+            placeholder="Any small idea works: a name, a place, one sentence." />
           <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
             <Btn variant="primary" onClick={() => run("expand")} disabled={busy || !fragment.trim()} title="Expand your written fragment into a full entry, grounded in your world's canon">
               <IconSpark width={16} height={16} /> Grow my idea
@@ -77,11 +77,11 @@ export default function Create({ world, assets, addAsset }) {
       <div>
         <div className="section-label">Grounding context</div>
         <p style={{ fontSize: 13, color: "var(--text-faint)", lineHeight: 1.6, marginBottom: 14 }}>
-          Before generating, the app retrieves the canon entries most relevant to your fragment and sends them to Granite as context — this is what keeps new content consistent instead of generic.
+          Before generating, the app retrieves the canon entries most relevant to your fragment and sends them to Granite as context. That's what keeps new content consistent instead of generic.
         </p>
         {grounding.length === 0 ? (
           <div className="card" style={{ fontSize: 13.5, color: "var(--text-faint)" }}>
-            Nothing retrieved yet — generate something to see which existing entries it was grounded in.
+            Nothing retrieved yet. Generate something to see which existing entries it was grounded in.
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

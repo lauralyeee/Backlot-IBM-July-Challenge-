@@ -220,7 +220,7 @@ export default function Timeline({ world, assets, addAsset, setWorld, onWorldUpd
               </p>
             ) : (
               <p style={{ fontSize: 12.5, color: "var(--text-faint)", margin: "6px 0 0", lineHeight: 1.55 }}>
-                "{era}" has no description yet — add one below (or use Auto-describe)
+                "{era}" has no description yet. Add one below (or use Auto-describe)
                 so shifts and portraits know what this era actually means.
               </p>
             )}
@@ -256,7 +256,7 @@ export default function Timeline({ world, assets, addAsset, setWorld, onWorldUpd
       <div className="card">
         <h3 style={{ fontSize: 15.5, marginBottom: 4 }}>Set up your eras</h3>
         <p style={{ fontSize: 13.5, color: "var(--text-dim)", marginBottom: 12 }}>
-          Not fixed to 3 — add, edit, reorder, or remove eras. Order is the world's chronology.
+          Not fixed to 3. Add, edit, reorder, or remove eras. Order is the world's chronology.
           The descriptions matter: Time-Shift and portrait generation read them to understand
           what each era actually means, instead of guessing from its name.
         </p>
@@ -272,7 +272,7 @@ export default function Timeline({ world, assets, addAsset, setWorld, onWorldUpd
                     rows={2}
                     value={eraNoteValue}
                     onChange={(ev) => setEraNoteValue(ev.target.value)}
-                    placeholder="What defines this era? 1-2 sentences — events, tone, tech/culture. Time-Shift and portraits read this."
+                    placeholder="What defines this era? 1-2 sentences: events, tone, tech/culture. Time-Shift and portraits read this."
                   />
                   <div style={{ display: "flex", gap: 6 }}>
                     <Btn small onClick={saveRenameEra} disabled={eraBusy} title="Save this era's name and description">Save</Btn>
@@ -291,7 +291,7 @@ export default function Timeline({ world, assets, addAsset, setWorld, onWorldUpd
                   {((world.eraNotes || {})[e] || "").trim() ? (
                     <div style={{ fontSize: 12.5, color: "var(--text-dim)", lineHeight: 1.5 }}>{world.eraNotes[e]}</div>
                   ) : (
-                    <div style={{ fontSize: 12, color: "var(--text-faint)" }}>No description yet — Edit to write one, or use Auto-describe below.</div>
+                    <div style={{ fontSize: 12, color: "var(--text-faint)" }}>No description yet. Use Edit to write one, or try Auto-describe below.</div>
                   )}
                 </>
               )}

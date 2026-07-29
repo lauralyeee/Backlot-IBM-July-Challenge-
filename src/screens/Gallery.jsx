@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { uploadModel3D, generateModel3D, getModel3DStatus, deleteModel3D } from "../lib/api";
 import { Btn, EmptyState, Banner } from "../components/ui";
 import { IconUpload, IconCube, IconClose, IconTrash, TypeIcon } from "../components/Icons";
+import { TYPES, TYPE_META } from "../lib/worldData";
 
 const POLL_INTERVAL_MS = 4000;
 
@@ -89,6 +90,16 @@ export default function Gallery({ world, assets, addAsset }) {
   const [focused, setFocused] = useState(null);
   const fileInputRef = useRef(null);
 
+  // Assets grouped into a row per category (Character, Location, ...) in
+  // canonical TYPES order, skipping any type this world has nothing of --
+  // replaces the old single flat strip of every asset's icon, which read as
+  // a wall of undifferentiated squares once a world had more than a
+  // handful of entries.
+  const assetsByType = useMemo(
+    () => TYPES.map((t) => ({ type: t, items: assets.filter((a) => a.type === t) })).filter((g) => g.items.length),
+    [assets]
+  );
+
   // Poll every asset currently "pending" (Blender/CharMorph generation in
   // flight) until it flips to ready/failed. One shared interval covers all
   // of them rather than one timer per row.
@@ -119,7 +130,7 @@ export default function Gallery({ world, assets, addAsset }) {
     if (!file || !selectedAssetId) return;
     const ext = extOf(file.name);
     if (!ACCEPT_EXT.split(",").includes(ext)) {
-      setError(`"${ext || "that file"}" isn't a supported format — choose a 3D model (.glb/.gltf), an image, or a video.`);
+      setError(`"${ext || "that file"}" isn't a supported format. Choose a 3D model (.glb/.gltf), an image, or a video.`);
       return;
     }
     setUploadBusy(true);
@@ -166,7 +177,7 @@ export default function Gallery({ world, assets, addAsset }) {
       <div style={{ marginBottom: 18 }}>
         <h1 style={{ fontSize: 28, marginBottom: 6 }}>Gallery</h1>
         <p style={{ fontSize: 13.5, color: "var(--text-dim)", maxWidth: 640 }}>
-          Visual reference for anything in your world — a rotating 3D concept model,
+          Visual reference for anything in your world: a rotating 3D concept model,
           a piece of concept art, or a short video, attached to any character, location,
           or entry. Generate a 3D model for a character directly from canon, or upload
           your own media for anything that can't be generated.
@@ -179,64 +190,89 @@ export default function Gallery({ world, assets, addAsset }) {
         </Banner>
       )}
 
-      <div className="card" style={{ padding: 16, marginBottom: 22, display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }}>
-        <div style={{ flex: "1 1 320px", minWidth: 260 }}>
-          <label style={{ display: "block", fontSize: 12.5, color: "var(--text-dim)", marginBottom: 8 }}>
-            Add concept media to an asset
-          </label>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {assets.map((a) => (
-              <button
-                key={a.id}
-                type="button"
-                className={`asset-picker-item ${String(selectedAssetId) === String(a.id) ? "active" : ""}`}
-                onClick={() => setSelectedAssetId(String(a.id))}
-                data-tooltip={`${a.title} — ${a.type}${a.modelStatus === "ready" ? ` · has ${MEDIA_KIND_LABEL[a.modelKind || "3d"]}` : ""}`}
-                aria-label={`${a.title}, ${a.type}${a.modelStatus === "ready" ? `, has ${MEDIA_KIND_LABEL[a.modelKind || "3d"]}` : ""}`}
-                aria-pressed={String(selectedAssetId) === String(a.id)}
-              >
-                <TypeIcon type={a.type} width={17} height={17} />
-                {a.modelStatus === "ready" && <span className="asset-picker-dot" />}
-              </button>
-            ))}
-          </div>
-          {selectedAsset && (
-            <div style={{ marginTop: 8, fontSize: 12.5, color: "var(--text-dim)" }}>
-              Selected: <strong style={{ color: "var(--text)", fontWeight: 600 }}>{selectedAsset.title}</strong>
-            </div>
-          )}
+      {/* Selection area, revamped: assets grouped into a labeled row per
+          category instead of one flat icon strip, inside a borderless
+          section (a hairline below replaces the old bordered "card" box).
+          The upload/generate/remove actions only appear once something's
+          selected, as a slim contextual bar rather than three buttons
+          permanently sitting in the toolbar. */}
+      <div className="gallery-picker">
+        <div className="gallery-picker-head">
+          <label className="section-label" style={{ marginBottom: 0 }}>Add concept media</label>
+          <p className="gallery-picker-sub">Pick an asset below, then upload your own media or generate a 3D concept for it.</p>
         </div>
-        <Btn onClick={openFilePicker} disabled={!selectedAssetId || uploadBusy} title="Upload a 3D model (.glb/.gltf), a concept-art image, or a short video for the selected asset">
-          <IconUpload width={15} height={15} /> {uploadBusy ? "Uploading…" : "Upload media"}
-        </Btn>
-        {selectedAsset?.type === "character" ? (
-          <Btn
-            variant="primary"
-            onClick={() => handleGenerate(selectedAsset.id)}
-            disabled={genBusyId === selectedAsset.id || selectedAsset.modelStatus === "pending"}
-            title="Generate a 3D concept model from canon via Blender + CharMorph"
-          >
-            <IconCube width={15} height={15} /> {selectedAsset.modelStatus === "pending" || genBusyId === selectedAsset.id
-              ? "Generating…"
-              : "Generate 3D concept"}
-          </Btn>
-        ) : selectedAsset ? (
-          <span
-            style={{ fontSize: 12, color: "var(--text-faint)", maxWidth: 240, lineHeight: 1.4, display: "flex", alignItems: "center", gap: 6 }}
-            title="Blender/CharMorph generation drafts body-shape sliders from a character's canon sheet, so 3D generation only applies to character assets. Any type can still upload concept art or a video."
-          >
-            <IconCube width={13} height={13} style={{ flexShrink: 0 }} /> 3D generation isn't available for a {selectedAsset.type} — upload concept art or a video instead
-          </span>
-        ) : null}
-        {selectedAsset?.modelStatus === "ready" && (
-          <Btn
-            onClick={() => handleDelete(selectedAsset.id)}
-            disabled={deleteBusyId === selectedAsset.id}
-            title="Remove this asset's concept media (deletes the file and clears it from the Gallery)"
-          >
-            <IconTrash width={15} height={15} /> {deleteBusyId === selectedAsset.id ? "Removing…" : "Remove media"}
-          </Btn>
+
+        {assetsByType.map(({ type, items }) => (
+          <div className="asset-category-row" key={type}>
+            <div className="asset-category-label">
+              <TypeIcon type={type} width={13} height={13} />
+              {type === "other" ? "Other" : TYPE_META[type]?.label || type}
+            </div>
+            <div className="asset-chip-row">
+              {items.map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  className={`asset-chip ${String(selectedAssetId) === String(a.id) ? "active" : ""}`}
+                  onClick={() => setSelectedAssetId(String(a.id))}
+                  title={a.modelStatus === "ready" ? `Has ${MEDIA_KIND_LABEL[a.modelKind || "3d"]}` : undefined}
+                  aria-pressed={String(selectedAssetId) === String(a.id)}
+                >
+                  <TypeIcon type={a.type} width={14} height={14} />
+                  <span>{a.title}</span>
+                  {a.modelStatus === "ready" && <span className="asset-chip-dot" />}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+
+        {selectedAsset && (
+          <div className="gallery-action-bar fade-in">
+            <div className="gallery-action-bar-title">
+              <TypeIcon type={selectedAsset.type} width={15} height={15} />
+              <strong>{selectedAsset.title}</strong>
+              <Btn variant="ghost" small onClick={() => setSelectedAssetId("")}>
+                Change
+              </Btn>
+            </div>
+            <div className="gallery-action-bar-buttons">
+              <Btn onClick={openFilePicker} disabled={uploadBusy} title="Upload a 3D model (.glb/.gltf), a concept-art image, or a short video for the selected asset">
+                <IconUpload width={15} height={15} /> {uploadBusy ? "Uploading…" : "Upload media"}
+              </Btn>
+              {selectedAsset.type === "character" ? (
+                <Btn
+                  variant="primary"
+                  onClick={() => handleGenerate(selectedAsset.id)}
+                  disabled={genBusyId === selectedAsset.id || selectedAsset.modelStatus === "pending"}
+                  title="Generate a 3D concept model from canon via Blender + CharMorph"
+                >
+                  <IconCube width={15} height={15} /> {selectedAsset.modelStatus === "pending" || genBusyId === selectedAsset.id
+                    ? "Generating…"
+                    : "Generate 3D concept"}
+                </Btn>
+              ) : (
+                <span
+                  className="gallery-action-note"
+                  title="Blender/CharMorph generation drafts body-shape sliders from a character's canon sheet, so 3D generation only applies to character assets. Any type can still upload concept art or a video."
+                >
+                  <IconCube width={13} height={13} style={{ flexShrink: 0 }} /> 3D generation isn't available for a {selectedAsset.type}. Upload concept art or a video instead
+                </span>
+              )}
+              {selectedAsset.modelStatus === "ready" && (
+                <Btn
+                  variant="danger"
+                  onClick={() => handleDelete(selectedAsset.id)}
+                  disabled={deleteBusyId === selectedAsset.id}
+                  title="Remove this asset's concept media (deletes the file and clears it from the Gallery)"
+                >
+                  <IconTrash width={15} height={15} /> {deleteBusyId === selectedAsset.id ? "Removing…" : "Remove media"}
+                </Btn>
+              )}
+            </div>
+          </div>
         )}
+
         <input
           ref={fileInputRef}
           type="file"
@@ -250,7 +286,7 @@ export default function Gallery({ world, assets, addAsset }) {
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 18 }}>
           {pending.map((a) => (
             <span key={a.id} className="tag" title="Blender/CharMorph generation in progress" style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
-              <span className="pulse-dot" style={{ width: 6, height: 6 }} /> {a.title} — generating…
+              <span className="pulse-dot" style={{ width: 6, height: 6 }} /> {a.title}: generating…
             </span>
           ))}
         </div>
@@ -260,7 +296,7 @@ export default function Gallery({ world, assets, addAsset }) {
         <EmptyState
           icon={IconCube}
           title="No concept media yet"
-          text="Upload a 3D model, an image, or a video — or generate a 3D model for a character above — to see it here."
+          text="Upload a 3D model, an image, or a video (or generate a 3D model for a character above) to see it here."
         />
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 }}>
@@ -269,7 +305,7 @@ export default function Gallery({ world, assets, addAsset }) {
               key={a.id}
               className="gallery-tile"
               onClick={() => setFocused(a)}
-              title={`${a.title} — click to open a larger view`}
+              title={`${a.title}: click to open a larger view`}
             >
               <ConceptMedia
                 asset={a}

@@ -37,6 +37,8 @@ export const IconFolder = (p) => (<svg {...base} {...p}><path d="M3 7a2 2 0 0 1 
 export const IconUpload = (p) => (<svg {...base} {...p}><path d="M12 19V5M5 12l7-7 7 7" /></svg>);
 export const IconChevronUp = (p) => (<svg {...base} {...p}><path d="M18 15l-6-6-6 6" /></svg>);
 export const IconArrowsLeftRight = (p) => (<svg {...base} {...p}><path d="M7 7h13M17 3l3 4-3 4" /><path d="M17 17H4M7 21l-3-4 3-4" /></svg>);
+export const IconExpand = (p) => (<svg {...base} {...p}><path d="M8 3H3v5M16 3h5v5M21 16v5h-5M3 16v5h5" /></svg>);
+export const IconCollapse = (p) => (<svg {...base} {...p}><path d="M9 3v5H4M15 3v5h5M15 21v-5h5M9 21v-5H4" /></svg>);
 
 // Asset-type icon lookup — replaces the old per-type emoji in TYPE_META.
 // Keyed by the same `type` string stored on every asset.

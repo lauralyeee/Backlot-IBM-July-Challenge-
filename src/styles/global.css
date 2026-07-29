@@ -298,6 +298,7 @@ a { color: var(--accent-strong); }
 .btn-ghost:hover:not(:disabled) { background: var(--surface-hover); }
 .btn-sm { padding: 7px 13px; font-size: 13px; min-height: 34px; border-radius: 7px; }
 .btn-danger-ghost { color: var(--danger); background: transparent; border-color: var(--border); }
+.btn-danger-ghost:hover:not(:disabled) { border-color: var(--danger); background: var(--danger-soft); }
 
 .chip {
   font-family: var(--font-body);
@@ -423,51 +424,56 @@ textarea.field { resize: vertical; font-family: var(--font-body); }
 }
 .gallery-close-btn:hover { background: rgba(255, 255, 255, 0.09); color: #fff; }
 
-/* Asset icon-picker (replaces the old <select>): a row of type icons, one
-   per asset, with a floating tooltip on hover/focus instead of relying on
-   the browser's native title tooltip. */
-.asset-picker-item {
-  position: relative;
-  width: 42px; height: 42px;
-  border-radius: 10px;
+/* ---------- Gallery selection area (revamp): category rows + chips ----------
+   Replaces the old single bordered "card" toolbar with one flat icon-only
+   strip of every asset. Assets are grouped into a labeled row per category
+   (Character, Location, ...) so it's legible at a glance in a world with
+   many entries, and each asset renders as an icon+name chip rather than a
+   bare icon square relying only on a hover tooltip to say what it is. */
+.gallery-picker {
+  padding-bottom: 22px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.gallery-picker-head { margin-bottom: 16px; }
+.gallery-picker-sub { font-size: 13px; color: var(--text-faint); margin-top: 5px; max-width: 560px; line-height: 1.5; }
+
+.asset-category-row + .asset-category-row { margin-top: 14px; }
+.asset-category-label {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--text-faint); font-weight: 600; margin-bottom: 8px;
+}
+
+.asset-chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.asset-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 13px 7px 11px;
+  border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--raised);
   color: var(--text-dim);
-  display: flex; align-items: center; justify-content: center;
+  font-size: 13px;
   cursor: pointer;
   transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
 }
-.asset-picker-item:hover { border-color: var(--text-faint); color: var(--text); }
-.asset-picker-item.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-.asset-picker-dot {
-  position: absolute; top: 4px; right: 4px;
+.asset-chip:hover { border-color: var(--text-faint); color: var(--text); }
+.asset-chip.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+.asset-chip-dot {
   width: 6px; height: 6px; border-radius: 50%;
-  background: currentColor; opacity: 0.7;
+  background: currentColor; opacity: 0.75; flex-shrink: 0;
 }
-.asset-picker-item[data-tooltip]::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  bottom: calc(100% + 9px);
-  left: 50%;
-  transform: translateX(-50%) translateY(4px);
-  background: var(--bg-elevated);
-  color: var(--text);
-  border: 1px solid var(--border-soft);
-  padding: 6px 11px;
-  border-radius: 7px;
-  font-size: 12px;
-  font-weight: 500;
-  white-space: nowrap;
-  box-shadow: var(--shadow-md);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.12s ease, transform 0.12s ease;
-  z-index: 20;
-}
-.asset-picker-item[data-tooltip]:hover::after,
-.asset-picker-item[data-tooltip]:focus-visible::after {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
+
+/* Contextual action bar — appears only once an asset is selected, in place
+   of the old three buttons that sat permanently in the toolbar whether or
+   not anything was picked yet. */
+.gallery-action-bar { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border-soft); }
+.gallery-action-bar-title { display: flex; align-items: center; gap: 9px; font-size: 14px; margin-bottom: 12px; color: var(--text-dim); }
+.gallery-action-bar-title strong { color: var(--text); font-weight: 600; }
+.gallery-action-bar-buttons { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.gallery-action-note {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--text-faint); max-width: 280px; line-height: 1.45;
 }
 
 .kbd-hint { font-size: 12px; color: var(--text-faint); }
@@ -504,4 +510,29 @@ textarea.field { resize: vertical; font-family: var(--font-body); }
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.03em;
   color: var(--text-faint);
+}
+
+/* ---------- capability reel (onboarding cover) ----------
+   Five capability frames run as a horizontal filmstrip, slate-numbered like
+   film cels, bracketed above/below by .filmstrip-divider. Scrolls on narrow
+   viewports instead of wrapping, so it reads as a reel rather than a grid. */
+.cap-reel {
+  display: flex;
+  overflow-x: auto;
+  border-top: 1px solid var(--border-soft);
+  border-bottom: 1px solid var(--border-soft);
+}
+.cap-frame {
+  flex: 1 0 180px;
+  padding: var(--space-5) var(--space-4);
+  border-right: 1px solid var(--border-soft);
+}
+.cap-frame:last-child { border-right: none; }
+.cap-frame .cap-slate { font-size: 13px; margin-bottom: var(--space-3); display: block; }
+.cap-frame .cap-icon { color: var(--text-dim); margin-bottom: var(--space-3); }
+.cap-frame .cap-title { font-weight: 600; font-size: 14px; color: var(--text); margin-bottom: 4px; }
+.cap-frame .cap-desc { font-size: 12.5px; color: var(--text-faint); line-height: 1.5; }
+
+@media (max-width: 700px) {
+  .cap-frame { flex: 1 0 150px; padding: var(--space-4) var(--space-3); }
 }

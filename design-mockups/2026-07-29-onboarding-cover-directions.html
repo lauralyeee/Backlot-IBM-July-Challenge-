@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Onboarding cover — three directions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0A0A0A;
+    --bg-elevated: #121212;
+    --surface: #1B1B1A;
+    --surface-hover: #242423;
+    --raised: #2E2E2D;
+    --border: #3A3A39;
+    --border-soft: #262625;
+    --text: #DAD9D8;
+    --text-dim: #A7A7A6;
+    --text-faint: #6E6E6D;
+    --accent: #DAD9D8;
+    --accent-strong: #FFFFFF;
+    --on-accent: #0A0A0A;
+    --accent-soft: rgba(218, 217, 216, 0.10);
+    --font-display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+    --font-body: 'Inter', system-ui, sans-serif;
+    --radius-sm: 8px;
+    --radius: 10px;
+    --radius-lg: 16px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #050505;
+    color: var(--text);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    padding: 48px 24px 100px;
+  }
+  h1, h2, h3, h4 { font-family: var(--font-display); margin: 0; letter-spacing: -0.01em; }
+  p { margin: 0; }
+
+  .page-head { max-width: 900px; margin: 0 auto 56px; }
+  .page-head .kicker { font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-faint); font-weight: 600; margin-bottom: 10px; }
+  .page-head h1 { font-size: 30px; color: #fff; margin-bottom: 10px; }
+  .page-head p { color: var(--text-dim); font-size: 15px; line-height: 1.65; max-width: 720px; }
+
+  .compare-block { max-width: 1180px; margin: 0 auto 80px; }
+  .compare-label { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; flex-wrap: wrap; }
+  .compare-label .tag-num { font-family: var(--font-display); font-size: 15px; color: var(--text-faint); font-weight: 700; }
+  .compare-label h2 { font-size: 22px; color: #fff; }
+  .effort-badge {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;
+    padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border);
+    color: var(--text-dim); margin-left: auto;
+  }
+  .effort-low { color: #A8C0AE; border-color: #3a4a3d; }
+  .effort-med { color: #C7B98A; border-color: #4a4230; }
+  .effort-high { color: #C9A8A3; border-color: #4a3330; }
+  .compare-note { color: var(--text-faint); font-size: 13.5px; line-height: 1.6; max-width: 760px; margin-bottom: 20px; }
+
+  /* fake browser chrome around each mock */
+  .device-frame {
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid var(--border-soft);
+    box-shadow: 0 24px 70px rgba(0,0,0,0.55);
+    background: var(--bg);
+  }
+  .device-bar {
+    height: 34px; background: var(--bg-elevated); display: flex; align-items: center; gap: 6px; padding: 0 14px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .device-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--raised); }
+
+  /* ---- shared brand mark (aperture) ---- */
+  .brand-mark { width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--text); position: relative; flex-shrink: 0; }
+  .brand-mark::before { content: ""; position: absolute; inset: 6px; border-radius: 50%; border: 1.5px solid var(--text-dim); }
+  .brand-mark::after { content: ""; position: absolute; inset: 12px; border-radius: 50%; background: var(--text); }
+
+  /* ================= OPTION 1 — refined split screen ================= */
+  .opt1-grid { display: grid; grid-template-columns: 1.05fr 1fr; min-height: 620px; }
+  .opt1-pitch {
+    padding: 52px 56px;
+    display: flex; flex-direction: column; justify-content: center;
+    background:
+      radial-gradient(680px 420px at 15% 8%, rgba(255,255,255,0.05), transparent 60%),
+      var(--bg-elevated);
+    border-right: 1px solid var(--border-soft);
+    position: relative;
+  }
+  .opt1-pitch .brand-row { display: flex; align-items: center; gap: 11px; margin-bottom: 34px; }
+  .opt1-pitch .brand-row span { font-family: var(--font-display); font-size: 14px; color: var(--text-faint); letter-spacing: 0.04em; text-transform: uppercase; }
+  .opt1-pitch h1 { font-size: 34px; line-height: 1.18; color: #fff; max-width: 440px; margin-bottom: 14px; }
+  .opt1-pitch .sub { font-size: 15px; color: var(--text-dim); line-height: 1.7; max-width: 430px; margin-bottom: 36px; }
+  .opt1-caps { display: grid; grid-template-columns: 1fr 1fr; gap: 20px 22px; }
+  .opt1-cap { display: flex; gap: 11px; align-items: flex-start; padding-top: 14px; border-top: 1px solid var(--border-soft); }
+  .opt1-cap svg { flex-shrink: 0; margin-top: 1px; color: var(--text-faint); }
+  .opt1-cap .t { font-weight: 600; font-size: 13.5px; color: var(--text); margin-bottom: 3px; }
+  .opt1-cap .d { font-size: 12.5px; color: var(--text-faint); line-height: 1.45; }
+
+  .opt1-right { padding: 52px 56px; display: flex; flex-direction: column; justify-content: center; }
+  .opt1-steps-dots { display: flex; gap: 6px; margin-bottom: 22px; max-width: 380px; }
+  .opt1-steps-dots div { height: 4px; flex: 1; border-radius: 2px; background: var(--border); }
+  .opt1-steps-dots div.on { background: var(--accent); }
+  .opt1-right .step-label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: #fff; font-weight: 700; margin-bottom: 8px; }
+  .opt1-right h2 { font-size: 23px; color: #fff; margin-bottom: 6px; }
+  .opt1-right p.hint { color: var(--text-dim); font-size: 14px; margin-bottom: 18px; max-width: 380px; }
+  .fakerole { display: flex; justify-content: space-between; align-items: center; padding: 15px 17px; border-radius: var(--radius); border: 1.5px solid var(--border); margin-bottom: 9px; max-width: 380px; }
+  .fakerole.on { border-color: var(--accent); background: var(--accent-soft); }
+  .fakerole .t { font-weight: 600; font-size: 14.5px; }
+  .fakerole .d { font-size: 12px; color: var(--text-faint); }
+  .fakecheck { width: 21px; height: 21px; border-radius: 6px; border: 1.5px solid var(--border); flex-shrink: 0; }
+  .fakecheck.on { border-color: var(--accent); background: var(--accent); }
+
+  /* ================= OPTION 2 — filmstrip reel ================= */
+  .opt2-wrap { padding: 60px 60px 46px; }
+  .opt2-top { display: flex; align-items: center; gap: 12px; margin-bottom: 30px; }
+  .opt2-top span { font-family: var(--font-display); font-size: 14px; color: var(--text-faint); letter-spacing: 0.04em; text-transform: uppercase; }
+  .opt2-hero { max-width: 640px; margin-bottom: 40px; }
+  .opt2-hero h1 { font-size: 32px; color: #fff; line-height: 1.16; margin-bottom: 12px; }
+  .opt2-hero p { font-size: 15px; color: var(--text-dim); line-height: 1.7; }
+
+  .sprocket-row { height: 10px; background-image: repeating-linear-gradient(90deg, var(--text-faint) 0 5px, transparent 5px 16px); opacity: 0.35; margin: 0 0 0; }
+  .filmstrip { display: flex; gap: 0; border-top: 1px solid var(--border-soft); border-bottom: 1px solid var(--border-soft); overflow-x: auto; }
+  .frame { flex: 1 0 190px; padding: 20px 18px; border-right: 1px solid var(--border-soft); }
+  .frame:last-child { border-right: none; }
+  .frame .slate { font-family: var(--font-display); font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 0.03em; color: var(--text-faint); font-size: 13px; margin-bottom: 14px; }
+  .frame svg { color: var(--text-dim); margin-bottom: 12px; }
+  .frame .t { font-weight: 600; font-size: 14px; color: var(--text); margin-bottom: 6px; }
+  .frame .d { font-size: 12.5px; color: var(--text-faint); line-height: 1.5; }
+
+  .opt2-bottom { display: flex; justify-content: center; margin-top: 40px; }
+  .opt2-steps { max-width: 400px; width: 100%; }
+  .opt2-steps-dots { display: flex; gap: 6px; margin-bottom: 18px; }
+  .opt2-steps-dots div { height: 4px; flex: 1; border-radius: 2px; background: var(--border); }
+  .opt2-steps-dots div.on { background: var(--accent); }
+
+  /* ================= OPTION 3 — single column, top stepper ================= */
+  .opt3-wrap { max-width: 560px; margin: 0 auto; padding: 56px 20px 60px; }
+  .opt3-top { display: flex; align-items: center; gap: 10px; margin-bottom: 30px; justify-content: center; }
+  .opt3-top span { font-family: var(--font-display); font-size: 13px; color: var(--text-faint); letter-spacing: 0.04em; text-transform: uppercase; }
+  .opt3-stepper { display: flex; align-items: center; gap: 8px; margin-bottom: 34px; }
+  .opt3-stepper .seg { flex: 1; height: 3px; border-radius: 2px; background: var(--border); }
+  .opt3-stepper .seg.on { background: var(--accent); }
+  .opt3-stepper .n { font-size: 11.5px; color: var(--text-faint); font-weight: 600; white-space: nowrap; }
+
+  .opt3-wrap h1 { font-size: 24px; color: #fff; text-align: center; line-height: 1.3; margin-bottom: 8px; }
+  .opt3-wrap p.sub { text-align: center; color: var(--text-dim); font-size: 14px; line-height: 1.6; margin-bottom: 22px; }
+
+  .opt3-toggle { display: flex; justify-content: center; margin-bottom: 22px; }
+  .opt3-toggle button {
+    font-family: var(--font-body); font-size: 12.5px; font-weight: 600; color: var(--text-dim);
+    background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 7px 14px;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .opt3-reveal { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 30px; }
+  .opt3-chip { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 999px; border: 1px solid var(--border); background: var(--raised); font-size: 12.5px; color: var(--text-dim); white-space: nowrap; }
+  .opt3-chip svg { color: var(--text-faint); }
+
+  .fakerole3 { display: flex; justify-content: space-between; align-items: center; padding: 15px 17px; border-radius: var(--radius); border: 1.5px solid var(--border); margin-bottom: 9px; }
+  .fakerole3.on { border-color: var(--accent); background: var(--accent-soft); }
+  .fakerole3 .t { font-weight: 600; font-size: 14.5px; }
+  .fakerole3 .d { font-size: 12px; color: var(--text-faint); }
+
+  .foot-note { max-width: 900px; margin: 60px auto 0; padding-top: 30px; border-top: 1px solid var(--border-soft); color: var(--text-faint); font-size: 13px; line-height: 1.7; }
+  .foot-note strong { color: var(--text-dim); }
+</style>
+</head>
+<body>
+
+  <div class="page-head">
+    <div class="kicker">Onboarding cover — working comparison</div>
+    <h1>Three directions, same design system</h1>
+    <p>All three reuse your actual tokens: Barlow Condensed / Inter, the monochrome palette, the aperture mark, and the filmstrip + slate-number classes already sitting unused in <code>global.css</code>. Copy below is a first pass, not final. The brand name shown is a placeholder ("Backlot") to test how a real name would sit in the layout, not a decision.</p>
+  </div>
+
+  <!-- ============ OPTION 1 ============ -->
+  <div class="compare-block">
+    <div class="compare-label">
+      <span class="tag-num">01</span>
+      <h2>Refined split screen</h2>
+      <span class="effort-badge effort-low">Low effort · same layout</span>
+    </div>
+    <p class="compare-note">Keeps your current two-column shell. Fixes the part that actually reads as generic: a vertical list of five identical icon+title+text rows. Grouping them 2-up breaks the "AI SaaS feature list" rhythm, and a faint radial highlight behind the headline replaces the flat gradient.</p>
+    <div class="device-frame">
+      <div class="device-bar"><div class="device-dot"></div><div class="device-dot"></div><div class="device-dot"></div></div>
+      <div class="opt1-grid">
+        <div class="opt1-pitch">
+          <div class="brand-row">
+            <div class="brand-mark"></div>
+            <span>Backlot</span>
+          </div>
+          <h1>Give it a name, a scene, half an idea.</h1>
+          <p class="sub">It builds the lore around it using what you've already established, so nothing it adds contradicts your canon. Ask to see the same world in a different era, and it still holds together.</p>
+          <div class="opt1-caps">
+            <div class="opt1-cap">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+              <div><div class="t">Gap-Filling Engine</div><div class="d">One line in, a page of consistent lore out.</div></div>
+            </div>
+            <div class="opt1-cap">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9Z"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/></svg>
+              <div><div class="t">Character Generator</div><div class="d">Characters arrive with a backstory, and you can talk to them.</div></div>
+            </div>
+            <div class="opt1-cap">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+              <div><div class="t">Dialect &amp; Voice</div><div class="d">Every faction sounds different. Some you can hear out loud.</div></div>
+            </div>
+            <div class="opt1-cap">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
+              <div><div class="t">Time-Shift Mode</div><div class="d">Rewind or fast-forward any entry to another era.</div></div>
+            </div>
+            <div class="opt1-cap">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 11 3.83A2 2 0 0 0 9.57 3.24L4 3a1 1 0 0 0-1 1l.24 5.57a2 2 0 0 0 .59 1.42l9.58 9.58a2 2 0 0 0 2.83 0l4.35-4.35a2 2 0 0 0 0-2.83Z"/><circle cx="8.5" cy="8.5" r="1.5"/></svg>
+              <div><div class="t">Auto-Tagging</div><div class="d">Era, faction, mood, tagged quietly so search holds up later.</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="opt1-right">
+          <div class="opt1-steps-dots"><div class="on"></div><div></div><div></div></div>
+          <div class="step-label">Step 1 of 3</div>
+          <h2>What describes you?</h2>
+          <p class="hint">Pick all that apply. Wearing several hats is normal, the app blends them.</p>
+          <div class="fakerole on"><div><div class="t">Novelist / fiction writer</div><div class="d">Long-form prose, character-driven canon</div></div><div class="fakecheck on"></div></div>
+          <div class="fakerole"><div><div class="t">Game designer</div><div class="d">Systems, factions, playable worlds</div></div><div class="fakecheck"></div></div>
+          <div class="fakerole"><div><div class="t">Screenwriter</div><div class="d">Scene-first, dialogue-driven</div></div><div class="fakecheck"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ OPTION 2 ============ -->
+  <div class="compare-block">
+    <div class="compare-label">
+      <span class="tag-num">02</span>
+      <h2>Filmstrip reel</h2>
+      <span class="effort-badge effort-med">Medium effort · leans on motifs already in your CSS</span>
+    </div>
+    <p class="compare-note">Drops the split screen. Full-width hero, then the five capabilities run as a horizontal reel, slate-numbered like film frames (01–05), using the <code>.filmstrip-divider</code> / <code>.slate-number</code> classes that already exist in <code>global.css</code> but aren't used anywhere yet. This is the option that looks least like a template, because the motif is yours, not a generic icon-list.</p>
+    <div class="device-frame">
+      <div class="device-bar"><div class="device-dot"></div><div class="device-dot"></div><div class="device-dot"></div></div>
+      <div class="opt2-wrap">
+        <div class="opt2-top"><div class="brand-mark"></div><span>Backlot</span></div>
+        <div class="opt2-hero">
+          <h1>Give it a name, a scene, half an idea.</h1>
+          <p>It builds the lore around it using what you've already established. Ask to see the same world in a different era, and it still holds together.</p>
+        </div>
+        <div class="sprocket-row"></div>
+        <div class="filmstrip">
+          <div class="frame"><div class="slate">01</div><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><div class="t">Gap-Filling</div><div class="d">One line in, a page of lore out.</div></div>
+          <div class="frame"><div class="slate">02</div><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9Z"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/></svg><div class="t">Characters</div><div class="d">Arrive backstoried. You can talk to them.</div></div>
+          <div class="frame"><div class="slate">03</div><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><div class="t">Dialect &amp; Voice</div><div class="d">Every faction sounds different.</div></div>
+          <div class="frame"><div class="slate">04</div><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg><div class="t">Time-Shift</div><div class="d">Rewind any entry to another era.</div></div>
+          <div class="frame"><div class="slate">05</div><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 11 3.83A2 2 0 0 0 9.57 3.24L4 3a1 1 0 0 0-1 1l.24 5.57a2 2 0 0 0 .59 1.42l9.58 9.58a2 2 0 0 0 2.83 0l4.35-4.35a2 2 0 0 0 0-2.83Z"/><circle cx="8.5" cy="8.5" r="1.5"/></svg><div class="t">Auto-Tag</div><div class="d">Tagged quietly as your world grows.</div></div>
+        </div>
+        <div class="sprocket-row"></div>
+        <div class="opt2-bottom">
+          <div class="opt2-steps">
+            <div class="opt2-steps-dots"><div class="on"></div><div></div><div></div></div>
+            <div class="step-label" style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#fff;font-weight:700;margin-bottom:8px;">Step 1 of 3</div>
+            <h2 style="font-size:22px;color:#fff;margin-bottom:14px;">What describes you?</h2>
+            <div class="fakerole on"><div><div class="t">Novelist / fiction writer</div><div class="d">Long-form prose, character-driven canon</div></div><div class="fakecheck on"></div></div>
+            <div class="fakerole"><div><div class="t">Game designer</div><div class="d">Systems, factions, playable worlds</div></div><div class="fakecheck"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ OPTION 3 ============ -->
+  <div class="compare-block">
+    <div class="compare-label">
+      <span class="tag-num">03</span>
+      <h2>Single column, top stepper</h2>
+      <span class="effort-badge effort-high">Higher effort · restructures the wizard shell</span>
+    </div>
+    <p class="compare-note">No pitch panel at all. The wizard is the whole screen, centered, with a thin segmented bar up top instead of a sidebar-style column. Capabilities move behind a "see what it does" pill so they don't compete with the step you're actually on. Reads closer to Linear or Notion's setup flow than a marketing template. Best fit if you have time before the 31st to touch the layout, not just the copy.</p>
+    <div class="device-frame">
+      <div class="device-bar"><div class="device-dot"></div><div class="device-dot"></div><div class="device-dot"></div></div>
+      <div class="opt3-wrap">
+        <div class="opt3-top"><div class="brand-mark" style="width:26px;height:26px;"></div><span>Backlot</span></div>
+        <div class="opt3-stepper">
+          <span class="n">Who you are</span>
+          <div class="seg on"></div><div class="seg"></div><div class="seg"></div>
+          <span class="n">Name it</span>
+        </div>
+        <h1>What describes you?</h1>
+        <p class="sub">Pick all that apply. Wearing several hats is normal, the app blends them.</p>
+
+        <div class="opt3-toggle">
+          <button><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg> What this app actually does</button>
+        </div>
+        <div class="opt3-reveal">
+          <div class="opt3-chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Fills gaps in your lore</div>
+          <div class="opt3-chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9Z"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/></svg>Generates chattable characters</div>
+          <div class="opt3-chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>Gives factions a voice</div>
+          <div class="opt3-chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>Shifts any entry between eras</div>
+          <div class="opt3-chip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 11 3.83A2 2 0 0 0 9.57 3.24L4 3a1 1 0 0 0-1 1l.24 5.57a2 2 0 0 0 .59 1.42l9.58 9.58a2 2 0 0 0 2.83 0l4.35-4.35a2 2 0 0 0 0-2.83Z"/><circle cx="8.5" cy="8.5" r="1.5"/></svg>Tags everything on its own</div>
+        </div>
+
+        <div class="fakerole3 on"><div><div class="t">Novelist / fiction writer</div><div class="d">Long-form prose, character-driven canon</div></div><div class="fakecheck on"></div></div>
+        <div class="fakerole3"><div><div class="t">Game designer</div><div class="d">Systems, factions, playable worlds</div></div><div class="fakecheck"></div></div>
+        <div class="fakerole3"><div><div class="t">Screenwriter</div><div class="d">Scene-first, dialogue-driven</div></div><div class="fakecheck"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot-note">
+    <strong>Reading order if you're short on time before the 31st:</strong> Option 1 is a same-day copy-and-CSS swap in <code>Onboarding.jsx</code>, no structural risk before a submission deadline. Option 2 is worth it only if the filmstrip motif is something you want to show off in the demo video, since judges will see this screen in the first ten seconds. Option 3 is the most "modern SaaS" of the three but touches the most code, so only take it on if Time-Shift and NPC generation are already stable.
+  </div>
+
+</body>
+</html>

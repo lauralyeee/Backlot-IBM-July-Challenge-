@@ -1,7 +1,7 @@
 import { IconClose, IconAlert, IconCheck, IconGlobe } from "./Icons";
 
 export function Btn({ children, onClick, disabled, variant, small, style, type = "button", ...rest }) {
-  const cls = ["btn", variant === "primary" && "btn-primary", variant === "ghost" && "btn-ghost", small && "btn-sm"].filter(Boolean).join(" ");
+  const cls = ["btn", variant === "primary" && "btn-primary", variant === "ghost" && "btn-ghost", variant === "danger" && "btn-danger-ghost", small && "btn-sm"].filter(Boolean).join(" ");
   return <button type={type} className={cls} onClick={onClick} disabled={disabled} style={style} {...rest}>{children}</button>;
 }
 

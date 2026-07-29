@@ -1,4 +1,4 @@
-# Worldbuilding Co-Pilot
+# Backlot
 
 AI worldbuilding assistant built on IBM Granite via watsonx.ai, for the IBM AI Builders Challenge (July 2026, Creative Industries theme).
 

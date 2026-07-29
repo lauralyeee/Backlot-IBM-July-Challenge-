@@ -26,6 +26,13 @@ export default function Characters({ world, assets, addAsset }) {
   const [traitPersonality, setTraitPersonality] = useState("");
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [speaking, setSpeaking] = useState(false);
+  // Tracks which line is currently loading/playing so the mic button (and a
+  // caption under the line) can show it instead of leaving the user
+  // guessing during the gap between pressing play and audio actually
+  // starting -- see speakLine() below. key is a thread message index, or
+  // "auto" for the "Speak replies aloud" auto-play path; phase is
+  // "loading" while waiting on the AI voice, then "speaking" once it starts.
+  const [voiceStatus, setVoiceStatus] = useState({ key: null, phase: null });
   const [portraitBusy, setPortraitBusy] = useState(false);
   const [voiceBusy, setVoiceBusy] = useState(false);
   const [voicePreview, setVoicePreview] = useState(null); // { voiceDescription, voiceId, voiceName, audioBase64 }
@@ -92,15 +99,22 @@ export default function Characters({ world, assets, addAsset }) {
     setSpeaking(false);
     setVoicePreview(null);
     setTriedVoiceIds([]);
+    setVoiceStatus({ key: null, phase: null });
   }, [mode]);
 
-  function speakLine(text) {
+  function speakLine(text, key = "auto") {
     // Uses the character's cast AI voice if one exists, falling back to
     // Web Speech automatically (no cast yet, Gemini quota exhausted,
     // network error) -- see speakAsCharacterOrFallback() in lib/voice.js.
+    // There's real buffer time between calling this and audio actually
+    // starting (a network round trip plus TTS synthesis), so voiceStatus
+    // flips to "loading" right away instead of leaving the button looking
+    // inert -- a user pressing play again mid-request was the bug report
+    // this is fixing.
+    setVoiceStatus({ key, phase: "loading" });
     speakAsCharacterOrFallback(world.id, activeChar, text, world.dialects, {
-      onStart: () => setSpeaking(true),
-      onEnd: () => setSpeaking(false),
+      onStart: () => { setSpeaking(true); setVoiceStatus({ key, phase: "speaking" }); },
+      onEnd: () => { setSpeaking(false); setVoiceStatus({ key: null, phase: null }); },
     });
   }
 
@@ -208,9 +222,9 @@ export default function Characters({ world, assets, addAsset }) {
     try {
       const res = await ask(world.id, mode, q, next.slice(0, -1));
       setThreads((t) => ({ ...t, [mode]: [...next, { role: "ai", text: res.reply, emotion: res.emotion || "neutral" }] }));
-      if (autoSpeak && voiceSupported()) speakLine(res.reply);
+      if (autoSpeak && voiceSupported()) speakLine(res.reply, next.length);
     } catch (e) {
-      const fallback = `${activeChar?.title || "They"} says nothing — the service is unreachable right now (${e.message}).`;
+      const fallback = `${activeChar?.title || "They"} says nothing. The service is unreachable right now (${e.message}).`;
       setThreads((t) => ({ ...t, [mode]: [...next, { role: "ai", text: fallback }] }));
     }
     setBusy(false);
@@ -221,14 +235,14 @@ export default function Characters({ world, assets, addAsset }) {
       <div style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
         <div style={{ marginBottom: 14 }}>
           <h1 style={{ fontSize: 28, marginBottom: 6 }}>Characters</h1>
-          <p style={{ fontSize: 13.5, color: "var(--text-dim)" }}>Chat with anyone you've created — pick someone from your cast, or generate someone new.</p>
+          <p style={{ fontSize: 13.5, color: "var(--text-dim)" }}>Chat with anyone you've created. Pick someone from your cast, or generate someone new.</p>
         </div>
         <Field
           area
           rows={3}
           value={npcPrompt}
           onChange={(e) => setNpcPrompt(e.target.value)}
-          placeholder="Describe a character — as much or as little as you want…"
+          placeholder="Describe a character, as much or as little as you want…"
           style={{ marginBottom: 8 }}
         />
         <button
@@ -248,7 +262,7 @@ export default function Characters({ world, assets, addAsset }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
             <Field value={traitGender} onChange={(e) => setTraitGender(e.target.value)} placeholder="Gender (blank = AI decides)" />
             <Field value={traitAge} onChange={(e) => setTraitAge(e.target.value)} placeholder="Age, e.g. 17, mid-40s, ancient (blank = AI decides)" />
-            <Field area rows={2} value={traitAppearance} onChange={(e) => setTraitAppearance(e.target.value)} placeholder="Appearance — also feeds their portrait (blank = AI decides)" />
+            <Field area rows={2} value={traitAppearance} onChange={(e) => setTraitAppearance(e.target.value)} placeholder="Appearance, also feeds their portrait (blank = AI decides)" />
             <Field area rows={2} value={traitPersonality} onChange={(e) => setTraitPersonality(e.target.value)} placeholder="Personality / characteristics (blank = AI decides)" />
           </div>
         )}
@@ -257,7 +271,7 @@ export default function Characters({ world, assets, addAsset }) {
         </Btn>
         <div style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
           {characters.length === 0 && (
-            <p style={{ fontSize: 13, color: "var(--text-faint)", padding: "12px 4px" }}>No characters yet — generate one above to start a conversation.</p>
+            <p style={{ fontSize: 13, color: "var(--text-faint)", padding: "12px 4px" }}>No characters yet. Generate one above to start a conversation.</p>
           )}
           {characters.map((c) => (
             <button
@@ -289,9 +303,9 @@ export default function Characters({ world, assets, addAsset }) {
                         <img
                           key={`${activeChar.id}-${effExpression}-${retryNonce}`}
                           src={headerUrl}
-                          alt={`${activeChar.title} — ${effExpression}`}
+                          alt={`${activeChar.title}, ${effExpression}`}
                           className="portrait-img"
-                          title={`Expression: ${effExpression} — click to view full size`}
+                          title={`Expression: ${effExpression} (click to view full size)`}
                           style={{ cursor: "pointer" }}
                           onClick={() => window.open(headerUrl, "_blank", "noopener")}
                           onLoad={() => setImgState("ok")}
@@ -308,7 +322,7 @@ export default function Characters({ world, assets, addAsset }) {
                         <div className="portrait-error">
                           <IconImage width={22} height={22} style={{ opacity: 0.6 }} />
                           <div style={{ fontSize: 11, lineHeight: 1.35, padding: "0 8px", textAlign: "center" }}>
-                            Image service is busy (rate limit) — wait ~15s
+                            Image service is busy (rate limit), wait ~15s
                           </div>
                           <Btn small onClick={() => { setImgState("loading"); setRetryNonce((n) => n + 1); }} title="Try loading the portrait again">
                             Retry
@@ -334,7 +348,7 @@ export default function Characters({ world, assets, addAsset }) {
                 )}
               </div>
               <div style={{ fontSize: 13.5, color: "var(--text-dim)", lineHeight: 1.5, flex: 1 }}>
-                <strong style={{ color: "var(--text)" }}>{activeChar.title}</strong> · {activeChar.faction} · {activeChar.era} — {activeChar.content}
+                <strong style={{ color: "var(--text)" }}>{activeChar.title}</strong> · {activeChar.faction} · {activeChar.era}: {activeChar.content}
                 {voiceSupported() && (
                   <div style={{ marginTop: 8 }}>
                     <Chip
@@ -345,26 +359,32 @@ export default function Characters({ world, assets, addAsset }) {
                       }}
                       title="Automatically read this character's replies aloud"
                     >
-                      <IconSpeaker width={13} height={13} /> Speak replies aloud
+                      <IconSpeaker width={13} height={13} className={voiceStatus.key === "auto" ? (voiceStatus.phase === "loading" ? "icon-pulse" : "icon-wave") : ""} />
+                      {" "}Speak replies aloud
+                      {voiceStatus.key === "auto" && (
+                        <span style={{ marginLeft: 6, fontWeight: 400, opacity: 0.75 }}>
+                          {voiceStatus.phase === "loading" ? "· loading voice…" : "· speaking…"}
+                        </span>
+                      )}
                     </Chip>
                   </div>
                 )}
                 {voiceSupported() && (
                   <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                     {!activeChar.voiceId && !voicePreview && (
-                      <Btn small onClick={castVoice} disabled={voiceBusy} title="Generate an AI voice for this character — preview it before it's used">
+                      <Btn small onClick={castVoice} disabled={voiceBusy} title="Generate an AI voice for this character, and preview it before it's used">
                         <IconMic width={13} height={13} /> {voiceBusy ? "Casting…" : "Cast a voice"}
                       </Btn>
                     )}
                     {voicePreview && (
                       <>
-                        <Btn small onClick={() => playVoicePreview(voicePreview.audioBase64)} title={`Play this voice preview again — voice "${voicePreview.voiceName}"`}>
+                        <Btn small onClick={() => playVoicePreview(voicePreview.audioBase64)} title={`Play this voice preview again: voice "${voicePreview.voiceName}"`}>
                           <IconPlay width={12} height={12} /> Preview{voicePreview.voiceName ? ` (${voicePreview.voiceName})` : ""}
                         </Btn>
                         <Btn small variant="primary" onClick={confirmVoice} disabled={voiceConfirmBusy} title="Use this voice for all of this character's replies from now on">
                           {voiceConfirmBusy ? "Saving…" : "Use this voice"}
                         </Btn>
-                        <Btn small onClick={castVoice} disabled={voiceBusy} title="Not quite right — try a different take">
+                        <Btn small onClick={castVoice} disabled={voiceBusy} title="Not quite right, try a different take">
                           <IconRefresh width={13} height={13} /> {voiceBusy ? "…" : "Try again"}
                         </Btn>
                         <Btn small onClick={discardVoicePreview} title="Discard this preview">
@@ -373,7 +393,7 @@ export default function Characters({ world, assets, addAsset }) {
                       </>
                     )}
                     {activeChar.voiceId && !voicePreview && (
-                      <Btn small onClick={castVoice} disabled={voiceBusy} title="Recast this character's voice — generates a new take to preview before it replaces the current one">
+                      <Btn small onClick={castVoice} disabled={voiceBusy} title="Recast this character's voice: generates a new take to preview before it replaces the current one">
                         <IconMic width={13} height={13} /> {voiceBusy ? "Casting…" : "Recast voice"}
                       </Btn>
                     )}
@@ -387,7 +407,7 @@ export default function Characters({ world, assets, addAsset }) {
                         const other = r.a.toLowerCase() === activeChar.title.toLowerCase() ? r.b : r.a;
                         return (
                           <div key={r.id} style={{ fontSize: 12.5 }}>
-                            <strong>{other}</strong>{r.context ? ` — ${r.context}` : ""}
+                            <strong>{other}</strong>{r.context ? `: ${r.context}` : ""}
                           </div>
                         );
                       })}
@@ -405,7 +425,11 @@ export default function Characters({ world, assets, addAsset }) {
                   text="They'll reply in character, consistent with your canon."
                 />
               )}
-              {thread.map((m, i) => (
+              {thread.map((m, i) => {
+                const isActive = voiceStatus.key === i;
+                const isLoading = isActive && voiceStatus.phase === "loading";
+                const isSpeaking = isActive && voiceStatus.phase === "speaking";
+                return (
                 <div key={i} style={{ marginBottom: 16, display: "flex", flexDirection: "column", alignItems: m.role === "user" ? "flex-end" : "flex-start" }}>
                   <div style={{ fontSize: 11.5, color: "var(--text-faint)", marginBottom: 3 }}>
                     {m.role === "user" ? "You" : activeChar.title}
@@ -415,8 +439,8 @@ export default function Characters({ world, assets, addAsset }) {
                       // Always the neutral variant: it's the one URL guaranteed to
                       // be warm in the browser cache (the header loads it first),
                       // so bubble avatars never spend rate-limit budget of their
-                      // own. Hidden entirely if it somehow still fails — a broken
-                      // icon is worse than no avatar.
+                      // own. Hidden entirely if it somehow still fails, since a
+                      // broken icon looks worse than no avatar at all.
                       <img
                         src={portraitUrl(activeChar, "neutral")}
                         alt=""
@@ -435,17 +459,23 @@ export default function Characters({ world, assets, addAsset }) {
                         <button
                           className="icon-btn"
                           style={{ width: 26, height: 26, flexShrink: 0 }}
-                          onClick={() => speakLine(m.text)}
-                          aria-label="Hear this line"
-                          title="Hear this line spoken in this character's voice"
+                          onClick={() => speakLine(m.text, i)}
+                          aria-label={isLoading ? "Loading voice" : isSpeaking ? "Speaking" : "Hear this line"}
+                          title={isLoading ? "Loading voice…" : isSpeaking ? "Speaking…" : "Hear this line spoken in this character's voice"}
                         >
-                          <IconMic width={13} height={13} />
+                          <IconMic width={13} height={13} className={isLoading ? "icon-pulse" : isSpeaking ? "icon-wave" : ""} />
                         </button>
                       )}
                     </div>
                   </div>
+                  {m.role === "ai" && (isLoading || isSpeaking) && (
+                    <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 4 }}>
+                      {isLoading ? "Loading voice…" : "Speaking…"}
+                    </div>
+                  )}
                 </div>
-              ))}
+                );
+              })}
               {busy && <Busy label="thinking…" />}
             </div>
 
@@ -492,6 +522,14 @@ export default function Characters({ world, assets, addAsset }) {
           from { box-shadow: 0 0 4px 1px var(--accent-soft); }
           to   { box-shadow: 0 0 16px 5px var(--accent-soft); }
         }
+        /* Loading (buffering on the AI voice call) vs. speaking (audio
+           actually playing) get distinct animations on the mic icon itself,
+           so there's a visible difference between "working on it" and
+           "playing now" without needing to read the caption underneath. */
+        .icon-pulse { animation: micPulse 1s ease-in-out infinite; }
+        .icon-wave { animation: micWave 0.5s ease-in-out infinite alternate; color: var(--accent); }
+        @keyframes micPulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+        @keyframes micWave { from { transform: scale(1); } to { transform: scale(1.22); } }
       `}</style>
     </div>
   );

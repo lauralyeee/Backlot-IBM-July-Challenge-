@@ -334,7 +334,7 @@ async def run_blender_export(asset_id: int, params: dict, base_model: str) -> tu
             await proc.wait()
             return False, f"Blender did not finish within {GENERATION_TIMEOUT_SECONDS}s (killed)."
     except FileNotFoundError:
-        return False, f"Blender executable not found at '{BLENDER_PATH}' — set BLENDER_PATH in backend/.env."
+        return False, f"Blender executable not found at '{BLENDER_PATH}'. Set BLENDER_PATH in backend/.env."
     except Exception as exc:
         return False, f"Failed to launch Blender: {exc}"
 

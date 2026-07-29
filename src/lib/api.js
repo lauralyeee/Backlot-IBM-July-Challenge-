@@ -166,6 +166,56 @@ export const deleteModel3D = (worldId, assetId) =>
 export const exportDocument = (worldId, { docType, era = "", faction = "" }) =>
   req("POST", `/worlds/${worldId}/export`, { docType, era, faction });
 
+/**
+ * Converts an already-compiled document (the `markdown` field returned by
+ * exportDocument() above -- Markdown, or Fountain for docType "script")
+ * into a real downloadable file (PDF/DOCX/Fountain/Markdown). Separate from
+ * `req()` since that helper always expects a JSON response body; this one
+ * expects a binary file and reads the filename off Content-Disposition.
+ * Never re-runs generation -- purely a format conversion of text the
+ * caller already has, so switching formats after a Generate is instant.
+ * @param {string} worldId
+ * @param {{ docType: string, format: "pdf"|"docx"|"fountain"|"markdown", content: string, assetCount?: number }} opts
+ * @returns {Promise<{ blob: Blob, filename: string }>}
+ */
+/**
+ * List past export versions ("history") for one document type, most-recent
+ * first. Every successful exportDocument() call snapshots a version
+ * server-side, so this is a read-only window onto prior compiles — feeds
+ * Export.jsx's Version History panel.
+ * @param {string} worldId
+ * @param {string} docType
+ * @returns {Promise<Array<{id, worldId, docType, era, faction, assetCount, content, offline, createdAt}>>}
+ */
+export const listExportHistory = (worldId, docType) =>
+  req("GET", `/worlds/${worldId}/export/history?docType=${encodeURIComponent(docType)}`);
+
+/**
+ * Remove one snapshot from a document type's version history (e.g. an
+ * experimental draft the writer doesn't want cluttering the list). Does not
+ * touch canon or any downloaded file — purely prunes the history list.
+ * @param {string} worldId
+ * @param {string} versionId
+ */
+export const deleteExportVersion = (worldId, versionId) =>
+  req("DELETE", `/worlds/${worldId}/export/history/${versionId}`);
+
+export async function downloadExport(worldId, { docType, format, content, assetCount = 0 }) {
+  const res = await fetch(`${BASE}/worlds/${worldId}/export/download`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ docType, format, content, assetCount }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`API POST /worlds/${worldId}/export/download → ${res.status}: ${text}`);
+  }
+  const blob = await res.blob();
+  const disposition = res.headers.get("Content-Disposition") || "";
+  const match = disposition.match(/filename="?([^"]+)"?/);
+  return { blob, filename: match ? match[1] : `export.${format}` };
+}
+
 // ── Ingestion (Feature 1: script/doc → auto-breakdown) ──────────────────────
 
 /**
