@@ -280,17 +280,12 @@ async def generate_custom_persona(body: CustomPersonaRequest):
 
     system_prompt, user_prompt = gen.custom_persona_prompt(description, custom_eras)
     try:
-        # personaLabel + up to 6 eras + 4 nameIdeas + 2-3 full seed entries
-        # (each up to 140 words) can run close to a tight ceiling and get
-        # truncated into invalid JSON -- parse_json() has no partial-repair
-        # path, so a truncated response loses the WHOLE persona (including
-        # the eras/label that already generated fine), not just the seed.
-        # This is the most likely cause of a "custom world came out empty"
-        # report -- the frontend's offline fallback then silently produces
-        # a world with generic eras and zero seed entries. Bumped
-        # 1000 -> 1400 -> 2000 for headroom; if this still truncates with
-        # the fallback model (mistral-medium-2505 tends to be more verbose
-        # than granite), raise it further or trim seed to 2 entries.
+        # personaLabel + up to 6 eras + 4 nameIdeas + 2-3 seed entries can hit
+        # a tight token ceiling and truncate into invalid JSON, losing the
+        # whole persona (not just the seed) since parse_json() can't
+        # partial-repair. Most likely cause of a "custom world came out
+        # empty" report. Bumped 1000 -> 1400 -> 2000 for headroom; raise
+        # further or trim seed to 2 entries if this still truncates.
         text = await wx.generate(system_prompt, user_prompt, max_tokens=2000)
         raw = wx.parse_json(text)
 
@@ -953,26 +948,16 @@ async def generate_portrait(world_id: str, asset_id: int):
 
 # ── AI-cast character voice (Gemini TTS) ─────────────────────────────────────
 
-# Mirrors the portrait "art director" pattern above: Granite drafts a short
-# voice description AND a gender read from the character's canon sheet, then
-# that's matched against Gemini TTS's 30 fixed prebuilt voices (see
-# voice.py's VOICE_POOL and module docstring for the full migration story
-# and gender-mapping caveat -- migrated 2026-07-28 from ElevenLabs, whose
-# free tier turned out to blanket-restrict any library/community voice via
-# API regardless of selection mechanism). Gender is applied as a hard
-# filter before the softer keyword scoring, same shape as before, so an
-# explicit trait like "female" can't get outvoted by other matched words.
-# IMPORTANT DIFFERENCE FROM THE OLD ELEVENLABS SHAPE: Gemini's fixed voices
-# don't carry accent/tone themselves -- the character's voice_description
-# has to be re-sent as prompt-time style direction on every synthesize()
-# call, not just at casting time, so /voice/speak below passes
-# asset["voiceDescription"] through, not just the voice id. Casting never
-# touches the asset row until /voice/confirm -- clicking "regenerate" on
-# the frontend just costs another design call (excluding voices already
-# shown this session), the same way the portrait repaint button costs
-# nothing but another seed. Once confirmed, the saved voice_id (a Gemini
-# voice name, e.g. "Kore") and voice_description are both reused for every
-# future chat reply via /voice/speak.
+# Mirrors the portrait "art director" pattern: Granite drafts a voice
+# description + gender read from the canon sheet, matched against Gemini
+# TTS's 30 fixed voices (see voice.py for the gender-mapping caveat).
+# Gender is a hard filter before softer keyword scoring, so an explicit
+# trait like "female" can't get outvoted. voice_description must be resent
+# as prompt-time style direction on every synthesize() call, not just at
+# casting -- /voice/speak passes asset["voiceDescription"] through for this
+# reason. Casting doesn't touch the asset row until /voice/confirm, so
+# "regenerate" just costs another design call. Once confirmed, voice_id +
+# voice_description are reused for every future reply via /voice/speak.
 
 def _voice_description_prompt(asset: dict) -> str:
     return (
@@ -1543,14 +1528,12 @@ async def _auto_tag(asset: dict, world: dict, assets: list[dict], lock_type: boo
 
 # ── Consistency audit ────────────────────────────────────────────────────────
 
-# Consistency check: how many of a world's most-recently-created assets
-# get sent to the model. Every included asset's FULL content is sent,
-# untruncated -- unlike normal generation grounding (which retrieves only
-# a few entries relevant to one query and truncates each), this needs the
-# whole canon at once to actually find cross-entry contradictions. The
-# cap exists only to keep the prompt inside a safe token budget for very
-# large worlds; when it bites, the response says so (`skipped`) instead
-# of silently acting like coverage was complete.
+# How many of a world's most-recent assets get sent to the audit model.
+# Unlike normal generation grounding (a few relevant entries, truncated),
+# audit needs the whole canon at once to find cross-entry contradictions,
+# so full content is sent untruncated. The cap just keeps large worlds
+# inside a safe token budget; when it bites, the response says so
+# (`skipped`) instead of silently acting complete.
 _AUDIT_ASSET_LIMIT = 60
 
 

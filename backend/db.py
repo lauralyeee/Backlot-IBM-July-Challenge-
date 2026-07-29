@@ -84,48 +84,33 @@ def init_db():
             );
             CREATE INDEX IF NOT EXISTS idx_export_versions_world_doctype ON export_versions(world_id, doc_type);
         """)
-        # Migration: add source_asset_id column if it doesn't exist yet
-        # (safe to run every startup — ALTER TABLE is a no-op when already present)
+        # Additive migrations below -- ALTER TABLE is a no-op if the column already exists.
         existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(assets)").fetchall()}
         if "source_asset_id" not in existing_cols:
             conn.execute("ALTER TABLE assets ADD COLUMN source_asset_id INTEGER DEFAULT NULL")
-        # Migration: status ("confirmed" | "unconfirmed") + source_document_id,
-        # added for Feature 1 (script ingestion). Same additive pattern as
-        # source_asset_id above — Feature 3 (The Loop) reuses source_document_id
-        # for its own re-import/re-export sync, so it doesn't need its own migration.
+        # status + source_document_id: script-ingestion review flow; source_document_id
+        # is reused by The Loop's re-import/re-export sync later.
         if "status" not in existing_cols:
             conn.execute("ALTER TABLE assets ADD COLUMN status TEXT NOT NULL DEFAULT 'confirmed'")
         if "source_document_id" not in existing_cols:
             conn.execute("ALTER TABLE assets ADD COLUMN source_document_id TEXT DEFAULT NULL")
-        # Migration: portrait_prompt + portrait_seed (NPC portrait feature).
-        # The image itself is never stored -- Pollinations.ai URLs are
-        # deterministic (same prompt+seed = same face), so persisting these
-        # two fields is enough to rebuild the portrait and all of its
-        # expression variants anywhere, forever.
+        # portrait_prompt/portrait_seed: the image itself isn't stored -- Pollinations
+        # URLs are deterministic (same prompt+seed = same face), so these rebuild it.
         if "portrait_prompt" not in existing_cols:
             conn.execute("ALTER TABLE assets ADD COLUMN portrait_prompt TEXT DEFAULT NULL")
         if "portrait_seed" not in existing_cols:
             conn.execute("ALTER TABLE assets ADD COLUMN portrait_seed INTEGER DEFAULT NULL")
-        # Migration: era_notes on worlds -- JSON object mapping era name ->
-        # 1-2 sentence description. Gives the model actual context for what
-        # each era IS (era names alone made it guess, e.g. inventing aging
-        # between eras whose chronology it couldn't know).
+        # era_notes: 1-2 sentence description per era, so era-shift generation has
+        # real context instead of guessing chronology from era names alone.
         world_cols = {row[1] for row in conn.execute("PRAGMA table_info(worlds)").fetchall()}
         if "era_notes" not in world_cols:
             conn.execute("ALTER TABLE worlds ADD COLUMN era_notes TEXT NOT NULL DEFAULT '{}'")
-        # Migration: description on worlds -- a short free-text world premise.
-        # Captured once at onboarding (reusing text the writer already typed,
-        # or a preset persona's own blurb) and fed into every generation
-        # prompt via generation.premise_block() so the model -- and in-character
-        # chat -- actually knows what this world is about, not just its name.
+        # description: short world premise, fed into every generation prompt
+        # via generation.premise_block().
         if "description" not in world_cols:
             conn.execute("ALTER TABLE worlds ADD COLUMN description TEXT NOT NULL DEFAULT ''")
-        # Migration: 3D concept model fields on assets (3D character concept
-        # viewer feature). All nullable/additive, same pattern as portrait_*
-        # above. model_status distinguishes "no model attempted yet" (NULL)
-        # from "pending" / "ready" / "failed" -- generation is async (Blender
-        # subprocess or a manual upload), unlike the synchronous portrait
-        # endpoint, so the frontend needs a state to poll.
+        # 3D concept model fields. model_status tracks async generation state
+        # (pending/ready/failed) since Blender runs as a subprocess, not inline.
         if "model_path" not in existing_cols:
             conn.execute("ALTER TABLE assets ADD COLUMN model_path TEXT DEFAULT NULL")
         if "model_source" not in existing_cols:
@@ -136,33 +121,18 @@ def init_db():
             conn.execute("ALTER TABLE assets ADD COLUMN model_error TEXT DEFAULT NULL")
         if "model_added_at" not in existing_cols:
             conn.execute("ALTER TABLE assets ADD COLUMN model_added_at INTEGER DEFAULT NULL")
-        # Migration: model_kind -- the Gallery grew beyond 3D-only concept
-        # models to also accept image and video concept media (useful for
-        # lore/location/event entries, which can't generate a 3D model, and
-        # as an alternative for characters too). NULL/"3d" both mean "3D
-        # model" for backward compatibility with rows written before this
-        # column existed -- see _row_to_asset() below.
+        # model_kind: Gallery also accepts uploaded image/video concept media, not just
+        # 3D models. NULL/"3d" both mean 3D model, for rows written before this existed.
         if "model_kind" not in existing_cols:
             conn.execute("ALTER TABLE assets ADD COLUMN model_kind TEXT DEFAULT NULL")
-        # Migration: voice_id + voice_description (AI-cast character voice
-        # feature). voice_id is the permanent voice identifier (a Gemini TTS
-        # persisted once a cast is confirmed (mirrors portrait_prompt/
-        # portrait_seed and model_* above -- additive, nullable, no backfill
-        # onto existing characters). voice_description is kept alongside it
-        # so a later recast can show/reuse the description that produced it
-        # instead of re-drafting from scratch every time.
+        # voice_id/voice_description: AI-cast character voice, kept together so a
+        # recast can reuse the description that produced the original voice.
         if "voice_id" not in existing_cols:
             conn.execute("ALTER TABLE assets ADD COLUMN voice_id TEXT DEFAULT NULL")
         if "voice_description" not in existing_cols:
             conn.execute("ALTER TABLE assets ADD COLUMN voice_description TEXT DEFAULT NULL")
-        # Migration: type_label (custom category name for "other"-typed
-        # assets). "faction" used to be a fixed asset type -- not every
-        # world has factions, or calls them that, so any asset that
-        # doesn't fit lore/character/location/event now lands in the
-        # generic "other" type, with this column holding the AI- (or
-        # writer-) supplied name for what kind of thing it actually is
-        # (e.g. "Faction", "Clan", "Guild"). Additive, nullable, no
-        # backfill -- same pattern as portrait_prompt/voice_id above.
+        # type_label: custom category name for "other"-typed assets (e.g. "Faction",
+        # "Clan") when lore/character/location/event doesn't fit.
         if "type_label" not in existing_cols:
             conn.execute("ALTER TABLE assets ADD COLUMN type_label TEXT DEFAULT NULL")
 
@@ -545,13 +515,9 @@ def _row_to_relationship(row) -> dict:
 
 
 # ── Export version history (Export screen: "Version History") ──────────────
-#
-# Every successful /export compile is snapshotted here so writers can page
-# back through earlier drafts of a document type (a re-run with different
-# filters, a re-roll after editing canon, etc.) instead of the generated
-# text vanishing the moment they regenerate or navigate away. Purely
-# additive/read-side-effect-only from the rest of the app's perspective --
-# nothing here is ever read back into canon.
+# Every successful /export compile is snapshotted so writers can page back
+# through earlier drafts instead of losing them on regenerate. Read-only
+# history, never read back into canon.
 
 _EXPORT_HISTORY_KEEP = 30  # per world+docType — oldest beyond this are pruned
 

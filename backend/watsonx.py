@@ -1,19 +1,14 @@
 """
-watsonx.ai / IBM Granite client — server-side.
+watsonx.ai / IBM Granite client -- server-side.
 
-Credentials (WATSONX_API_KEY, WATSONX_PROJECT_ID) live only here;
-the browser never sees them.  The frontend calls /api/generate,
-/api/ping, /api/models — this module handles the actual IBM calls.
+Credentials (WATSONX_API_KEY, WATSONX_PROJECT_ID) live only here; the
+browser never sees them. The frontend calls /api/generate, /api/ping,
+/api/models -- this module handles the actual IBM calls.
 
-NOTE (2026-07-26): switched from the raw completion endpoint
-(/ml/v1/text/generation) to the chat-completions endpoint
-(/ml/v1/text/chat). The completion endpoint requires the caller to
-hand-format Granite's chat template (<|start_of_role|>...<|end_of_text|>)
-and had no reliable stop signal, which is why replies were sometimes
-running on past the answer and echoing instruction-like text back at
-the user. /text/chat takes structured {role, content} messages and lets
-watsonx.ai apply each model's own chat template + stop handling, which
-is IBM's documented way to drive instruct/chat models.
+Uses the chat-completions endpoint (/ml/v1/text/chat) rather than raw
+completion, so watsonx.ai applies each model's own chat template and stop
+handling instead of us hand-formatting Granite's template and guessing at
+a stop signal.
 """
 
 import os
@@ -28,16 +23,10 @@ WATSONX_PROJECT_ID = os.environ.get("WATSONX_PROJECT_ID", "")
 IAM_URL = "https://iam.cloud.ibm.com/identity/token"
 WX_BASE = "https://eu-de.ml.cloud.ibm.com"
 
-# Keep in sync with src/lib/watsonx.js MODEL_CHAIN.
-# Primary is IBM Granite (this project's core LLM). The fallback used to be
-# "ibm/granite-3-3-8b-instruct", but a live GET /api/models check on
-# 2026-07-26 showed it is NOT reachable on this watsonx.ai project/region
-# (eu-de) -- it silently failed on every retry. Replaced with
-# "mistralai/mistral-medium-2505": confirmed live on this account, and the
-# strongest available fallback by intelligence/latency/cost among the
-# account's other reachable models (Llama 3.3 70B Instruct, Llama 4
-# Maverick, Mistral Small 3.1). If IBM deprecates a model or account access
-# changes, use /api/models to find current live IDs.
+# Keep in sync with src/lib/watsonx.js MODEL_CHAIN. Primary is IBM Granite;
+# fallback is mistral-medium-2505, the strongest model confirmed reachable
+# on this account/region after granite-3-3-8b-instruct turned out not to
+# be. If IBM deprecates a model, use /api/models to find live IDs.
 MODEL_CHAIN = ["ibm/granite-4-h-small", "mistralai/mistral-medium-2505"]
 
 _token_cache: dict = {"token": None, "expires_at": 0.0}

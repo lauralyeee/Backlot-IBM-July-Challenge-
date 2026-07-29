@@ -1,36 +1,28 @@
 """
 3D character concept model generation.
 
-Granite drafts a small set of body-shape morph parameters from a
-character's canon sheet; a headless Blender + CharMorph subprocess applies
-them to a CharMorph base mesh and exports a .glb. The base mesh is chosen
-per-character by a cheap Granite gender classification, because CharMorph's
-two best-supported bases have very different capabilities:
+Granite drafts body-shape morph parameters from a character's canon sheet;
+a headless Blender + CharMorph subprocess applies them to a base mesh and
+exports a .glb. The base mesh is picked per-character by a cheap Granite
+gender classification, since CharMorph's two best-supported bases differ:
 
-- Vitruvian (CC0): a multi-ethnicity/gender blend base whose packed UDIM
-  textures can't be exported by Blender's glTF exporter (see the
-  implementation plan doc for the full story), so it's exported with a flat
-  single-tone "concept_skin" material -- geometry/build/proportions are
-  real, texture is not. Used for male and unspecified-gender characters,
-  where Vitruvian's Gender_Male/Gender_Female sliders and broad
-  Age/BodyType/Race vocabulary matter more than skin texture.
-- Antonia Polygon (CC-BY): an anatomically fixed-female base whose textures
-  export cleanly through the same exporter, at the cost of a much larger
-  file (uncompressed exports run ~128MB) and a completely different,
-  female-only morph vocabulary (no Gender slider -- she just is one). Used
-  for characters classified as female, where real skin texture is judged
-  worth the size trade-off; export uses JPEG-compressed textures and Draco
-  mesh compression to keep the file web-sized.
+- Vitruvian (CC0): multi-gender base, but its packed UDIM textures can't be
+  exported by Blender's glTF exporter, so it ships with a flat single-tone
+  material -- geometry is real, texture isn't. Used for male/unspecified
+  characters, where the Gender_Male/Gender_Female and broad Age/BodyType/
+  Race sliders matter more than skin texture.
+- Antonia Polygon (CC-BY): fixed-female base with real exportable textures,
+  at the cost of a larger file (~128MB uncompressed) and a female-only
+  morph set. Used for characters classified as female; JPEG + Draco
+  compression keep the export web-sized.
 
-No male-appropriate real-texture base has been identified yet (Reom and
-MB-Lab male are untested) -- male/unspecified characters stay on Vitruvian's
-flat-material fallback for now.
+No real-texture male base has been identified yet, so male/unspecified
+characters stay on Vitruvian's flat-material fallback.
 
-Mirrors the shape of watsonx.py/ingestion.py: a couple of Granite "art
-director" calls plus a subprocess pipeline, both best-effort with a safe
-fallback path so a failure here never crashes the request thread --
-model_status/model_error on the asset row is how the frontend finds out
-what happened. Designed to run as a FastAPI BackgroundTask (see main.py's
+Mirrors watsonx.py/ingestion.py's shape: Granite "art director" calls plus
+a subprocess pipeline, best-effort with a safe fallback -- failures never
+crash the request thread, model_status/model_error on the asset row is how
+the frontend finds out. Runs as a FastAPI BackgroundTask (see main.py's
 /model3d/generate endpoint), so nothing here raises back to the caller.
 """
 
@@ -52,42 +44,25 @@ MODELS_DIR = BACKEND_DIR / "static" / "models"
 BLENDER_PATH = os.environ.get("BLENDER_PATH", "/opt/homebrew/bin/blender")
 GENERATION_TIMEOUT_SECONDS = int(os.environ.get("BLENDER_TIMEOUT_SECONDS", "300"))
 
-# CharMorph's OWN internal enum identifiers for each base -- NOT guaranteed
-# to match our lowercase routing labels used elsewhere in this module
-# (model_source strings like "charmorph-vitruvian", ALLOWED_MORPH_KEYS
-# selection, etc). CONFIRMED 2026-07-28 via a live Blender traceback
-# ("enum \"vitruvian\" not found in (...)") that the real enum values are
-# ('Vitruvian', 'antonia', 'mb_female', 'mb_male', 'reom') -- Vitruvian is
-# capitalized, unlike the others, which is exactly why the first attempt
-# at this routing failed: we were passing our own lowercase label straight
-# through as the literal --base-model value. This maps our label to the
-# exact string CharMorph's base_model property actually expects; only
-# used right at the Blender CLI boundary in run_blender_export() below.
+# CharMorph's real enum values for --base-model (confirmed via a live
+# traceback: 'Vitruvian' is capitalized, unlike the others). Maps our
+# lowercase routing labels to the exact string CharMorph expects; used
+# only at the Blender CLI boundary in run_blender_export().
 CHARMORPH_BASE_MODEL_VALUES = {
     "vitruvian": "Vitruvian",
     "antonia": "antonia",
 }
 
 # --- Vitruvian (CC0) morph keys -------------------------------------------
-# CharMorph morph keys this pipeline is allowed to set on the Vitruvian base
-# (Category_Name pattern -- every morph in CharMorph's UI list as
-# "Category_Name" maps to a Blender property "prop_Category_Name").
-# CONFIRMED 2026-07-28 against a real live generation's ALL_AVAILABLE_MORPHS
-# log (151 total morphs exposed by this CharMorph/Vitruvian install) --
-# every key below is a real, verified property name, not a guess. The full
-# 151-name list also includes fine facial/detail sliders (Face_*, Nose_*,
-# Jaw_*, Eyes_*, etc.) that are deliberately left out per the plan's own
-# scope: this feature draws body FORM only (build/age/gender/proportions),
-# not faces -- canon entries rarely describe facial structure precisely
-# enough to drive those sliders meaningfully anyway. Chest_* (breast/
-# areola/nipple sliders) are also deliberately excluded -- out of scope for
-# a "concept" body-form viewer, and not something a text model should ever
-# be setting from free-form canon text.
-#
-# generate_character.py still silently skips any key that somehow doesn't
-# resolve to a real CharMorph property (hasattr guard), so this list can be
-# safely extended later without risking a crash if a future CharMorph
-# version renames something.
+# Keys this pipeline may set on the Vitruvian base (Category_Name maps to
+# Blender property prop_Category_Name). Confirmed against a real
+# generation's ALL_AVAILABLE_MORPHS log (151 real morphs exposed). Scoped to
+# body FORM only -- age/gender/build/race/proportions -- deliberately
+# excluding facial detail sliders (canon text rarely describes faces
+# precisely enough to drive them) and Chest_* sliders (out of scope for a
+# concept viewer, not something a text model should set from free prose).
+# generate_character.py skips any key that doesn't resolve to a real
+# CharMorph property, so this list can be safely extended later.
 VITRUVIAN_MORPH_KEYS = [
     # Age
     "Age_Baby",
@@ -148,17 +123,12 @@ VITRUVIAN_GUIDANCE = (
 )
 
 # --- Antonia Polygon (CC-BY) morph keys ------------------------------------
-# Antonia is an anatomically fixed-female CharMorph base (no Gender
-# slider), with a totally different morph naming scheme -- plain,
-# space-separated names (not Category_Name), confirmed 2026-07-28 against a
-# real `sorted(n[5:] for n in dir(wm.charmorphs) if n.startswith("prop_"))`
-# dump the user pasted from Blender's own Python console. Curated down from
-# ~250 available morphs to a small body-FORM-only vocabulary, matching the
-# same scope decision as Vitruvian above -- no face sliders, and (unlike
-# Vitruvian, where nothing anatomical is exposed at all) an explicit
-# exclusion of every Breast/Nipple/Aureola/Genital/Labia/Mons pubis morph:
-# out of scope for a concept body-form viewer, never something a text model
-# should be setting from free-form canon text.
+# Antonia is a fixed-female CharMorph base (no Gender slider) with a
+# different morph naming scheme -- plain, space-separated names, not
+# Category_Name. Curated down from ~250 available morphs to the same
+# body-FORM-only scope as Vitruvian: no face sliders, and an explicit
+# exclusion of every Breast/Nipple/Genital-type morph, which is out of
+# scope for a concept viewer and not something a text model should set.
 ANTONIA_MORPH_KEYS = [
     "Athletic",
     "Athletic body only",
@@ -253,22 +223,15 @@ async def draft_params(asset: dict, allowed_keys: list[str], guidance: str) -> t
 
 async def classify_gender(asset: dict) -> str:
     """Cheap Granite call deciding which base mesh a character routes to.
-    Returns exactly "female", "male", or "unspecified" -- anything else
-    (a parse miss, an API error) falls back to "unspecified", which keeps
-    the character on the Vitruvian path rather than misrouting it to
-    Antonia's fixed-female base.
+    Returns "female", "male", or "unspecified" (the safe default on any
+    parse miss or API error, since it keeps routing on Vitruvian rather
+    than misrouting to Antonia's fixed-female base).
 
-    Confirmed live 2026-07-28 (two regenerations in a row, both clearly
-    female-coded characters via "she"/"her" pronouns throughout their
-    canon text): the earlier "classify this character's gender
-    presentation" phrasing was NOT truncating -- the model was replying
-    with the complete, correctly-formatted word "unspecified" both times.
-    That's a values judgment call a safety-tuned chat model tends to hedge
-    on by defaulting to neutral, even with clear pronoun evidence right in
-    front of it. Reframed as a mechanical pronoun-detection task instead
-    (not an identity judgment) -- models are much less likely to hedge on
-    "which pronoun does this text use" than on "what is this character's
-    gender."."""
+    Framed as pronoun detection, not a gender-identity judgment -- an
+    earlier "classify this character's gender presentation" phrasing got
+    hedged to "unspecified" even with clear pronoun evidence in the text;
+    models hedge far less on "which pronoun does this text use."
+    """
     try:
         raw = await wx.generate(
             "",
@@ -304,15 +267,11 @@ async def run_blender_export(asset_id: int, params: dict, base_model: str) -> tu
     cmd = [
         BLENDER_PATH,
         "--background",
-        # Without this, an unhandled Python exception inside the --python
-        # script does NOT make Blender exit non-zero -- Blender prints the
-        # traceback to stderr and quits normally (exit 0) by default.
-        # CONFIRMED as the real cause of a 2026-07-28 "success but no
-        # output file" failure: the script threw before its own first
-        # print, Blender swallowed it, returncode was 0, and our
-        # `if proc.returncode != 0` check below never fired -- the actual
-        # traceback was silently lost (not even in model_error). This flag
-        # makes Blender exit 1 on a script exception so that check works.
+        # Without this, an unhandled exception inside --python does NOT make
+        # Blender exit non-zero -- it prints the traceback and exits 0 by
+        # default, which caused a real "success but no output file" bug
+        # where the returncode check below never fired. Forces exit 1 on a
+        # script exception so that check actually works.
         "--python-exit-code", "1",
         "--python", str(BLENDER_SCRIPT),
         "--",

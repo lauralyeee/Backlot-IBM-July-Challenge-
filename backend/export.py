@@ -1,37 +1,18 @@
 """
-Feature 2 — Assets → Producible Output.
+Feature 2 -- Assets to Producible Output.
 
-Compiles a writer-chosen subset of confirmed canon assets into a
-production-usable document: Character Bios, a Location Breakdown, a Beat
-Sheet, a Pitch Packet, or a Sample Scene. Runs in the opposite direction to
-ingestion.py: where ingestion turns raw text INTO assets, this module turns
-existing assets INTO a formatted document.
+Compiles a writer-chosen subset of confirmed canon assets into a document:
+Character Bios, Location Breakdown, Beat Sheet, Pitch Packet, or Sample
+Scene. Opposite direction to ingestion.py (assets -> document, not text ->
+assets). Kept in its own module so main.py stays a single import + route
+registration.
 
-Kept in its own module (rather than folded into generation.py or main.py)
-so main.py's footprint stays a single import + route registration — the
-team's agreed pattern for avoiding merge conflicts on shared files.
+compile_document() produces Markdown (characters/locations/beats/pitch, a
+narrow # / ## / "- " / "> " / **bold** dialect) or Fountain plain text
+(script). render_download() then turns that into a PDF/DOCX/.fountain file
+-- offline, deterministic, no LLM call, even on a re-download.
 
-Two output shapes come out of the *compile* step (still read-only, still no
-DB writes):
-  - Markdown text, for "characters" / "locations" / "beats" / "pitch" — a
-    small, deliberately narrow Markdown dialect (# / ## headers, "- "
-    bullets, "> " for the offline-mode notice, **bold** inline) that only
-    has to round-trip what this module itself ever emits.
-  - Fountain-syntax plain text, for "script" — the industry-standard
-    plain-text screenplay interchange format (what Final Draft, Highland,
-    WriterDuet, Slugline, etc. all import/export). A title-page key:value
-    block, then scene headings / action / character cues / parentheticals /
-    dialogue / transitions.
-
-A second step, added for the export-format enhancement, turns either of
-those into an actual downloadable file — PDF, DOCX, or (for "script")
-raw .fountain — via `render_download()`. That step never calls the LLM: it
-converts whatever text the compile step (or a re-download of a previous
-result) already produced, entirely offline and deterministically.
-
-DOC_TYPES values:
-  str  — pass as type_filter to db.list_assets() to pull only that asset type
-  None — pull all asset types (type_filter=None means "no filter" in db.py)
+DOC_TYPES: str value = type_filter for db.list_assets(); None = all types.
 """
 
 from __future__ import annotations
@@ -457,24 +438,18 @@ def offline_compile(doc_type: str, assets: list[dict], world: dict) -> str:
 
 
 # ── Format conversion (Markdown/Fountain text → PDF / DOCX / Fountain file) ──
-#
-# Everything below is offline and deterministic — no LLM call, no DB access.
-# It converts whatever text `offline_compile()` or the online compile path
-# already produced (passed back in by the client, unchanged) into an actual
-# downloadable file. Two small, deliberately narrow parsers do the work:
-# `_md_blocks()` only understands the Markdown subset this module itself
-# ever emits, and `_parse_fountain()` only understands the Fountain subset
-# the "script" prompt above asks for. Neither is a general-purpose engine.
+# Offline and deterministic -- no LLM call, no DB access. Converts whatever
+# text the compile step already produced into a downloadable file. Two
+# narrow parsers do the work: _md_blocks() only understands the Markdown
+# subset this module emits, _parse_fountain() only the Fountain subset the
+# "script" prompt asks for. Neither is a general-purpose parser.
 
 _TITLE_KEYS = {"title", "credit", "author", "authors", "draft date", "source", "contact"}
 
-# Matches any run of 1-6 leading '#' characters. Granite is only ever asked
-# for "#" / "##" (see compile_system_prompt above), but in practice it
-# sometimes emits a deeper "### " sub-heading anyway -- without this, those
-# lines fell through to the plain-paragraph branch below and the literal
-# "###" showed up as visible text in the preview and every exported file.
-# Treating any heading depth as a real heading (capped visually at h3) means
-# that can never leak through again, regardless of what the model does.
+# Matches 1-6 leading '#' characters. Granite is only asked for "#"/"##" but
+# sometimes emits a deeper "### " heading anyway; without this it fell through
+# to the plain-paragraph branch and a literal "###" leaked into exported
+# files. Any heading depth now renders as a real heading, capped at h3.
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.*)$")
 
 
