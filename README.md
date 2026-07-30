@@ -44,8 +44,8 @@ The user can feed Backlot whatever they already have, one sentence or a full scr
 - **Two-pass generation.** Content is generated in one call. A second lightweight classification call then independently assigns `type`, `era`, `faction`, and `mood` tags based on Tier 2 auto-tagging and best-effort.
 
 ## Demo
+[Application Demo](https://www.youtube.com/watch?v=16FDa55rkA4)
 
-[https://www.youtube.com/watch?v=16FDa55rkA4]
 
 ### Screens
 
@@ -126,4 +126,6 @@ For a producer, the deliverable is the most crucial work. Export provides charac
 
 ## Link
 This application is hosted using Vercel. Note: Some functionalities are disabled due to technical constaints in production environment. The features like 3D generation and import functionality in production environment would be considered for future work. 
-[https://ibm-july-challenge-backlot.vercel.app/]
+[Backlot](https://ibm-july-challenge-backlot.vercel.app/)
+
+
