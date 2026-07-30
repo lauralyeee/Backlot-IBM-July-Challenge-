@@ -1,38 +1,75 @@
 # Backlot
 
-AI worldbuilding assistant built on IBM Granite via watsonx.ai for the IBM AI Builders Challenge (July 2026, Creative Industries theme).
+Backlot is an AI worldbuilding assistant for people who write, produce, or build worlds for games and interactive media. It is built on IBM Granite via watsonx.ai for IBM AI Builders Challenge (July 2026, Creative Industries theme) by Laura and Henry.
 
-## Architecture
+## Why
+
+For a writer, producer, or worldbuilder, the story was never the hard part. The hard part is everything after it by keeping details straight, building out characters, casting them, drawing them, catching it when episode nine quietly contradicts episode two. Most people working on games and interactive media don't have a writers' room or an art department on call.
+
+Backlot is built for people who are a solo creator or small team who needs the production support a studio would normally provide. Therefore, the process from getting an idea to something pitchable doesn't depend on having a whole team.
+
+## How it works
+
+The user can feed Backlot whatever they already have, one sentence or a full script, and it grows that into a structured world like characters, places, a timeline, etc. These are all checked against what's already in canon.
+
+- **Onboarding.** A free-text world description is sufficient for Granite to draft a persona label, name suggestions, starter eras, and a list of seed canon entries.
+- **Import.** Upload a pitch script (PDF or DOCX or Fountain or Text). IBM Docling parses the file into clean text, then Granite extracts characters, locations, props, and timeline markers from it, only what's actually in the text, nothing invented. Everything lands in a review queue; nothing is added to canon until it is approved.
+- **Create (Gap-Filling Engine).** Start from a single line, a name, a place, half an idea, and Granite expands it into a full canon entry. A custom term-overlap retrieval layer pulls in the most relevant existing canon first, so the result stays grounded instead of generic.
+- **Characters.** Generate a character with customizable traits (gender, age, appearance, personality). Granite drafts a voice-casting brief and a visual brief from the character's canon text. Google Gemini TTS casts an actual voice from a pool of 30 fixed voices, styled by accent and tone. Pollinations.ai (Flux model) renders a matching portrait from a fixed seed, so the same face renders every time.
+- **Timeline (Time-Shift Mode).** Re-renders any canon entry as it would exist in a different era, ageing or de-ageing it based on the year gap defined.
+- **World Book.** Every generated entry is auto-tagged with type, era, faction, and mood in the same generation call, plus a consistency audit across the canon library.
+- **Gallery.** Granite reads a character's canon sheet to pick body-shape parameters, which a headless Blender process running CharMorph applies to produce a real `.glb` 3D model, viewable and orbit-able via `<model-viewer>`. Gallery isn't limited to generated models: any asset, character, location, event, or otherwise, can also carry the uploaded concept art, reference photos, or short video.
+- **Export.** Compiles approved canon and art into a Markdown, PDF, or DOCX pitch packet. It's a compile step over what Granite already produced.
+
+### Architecture
 
 | Layer            | Technology                               |
-|------------------|------------------------------------------|
-| Frontend         | React 19 + Vite 8 (src/)                |
-| Backend          | FastAPI (Python) — backend/             |
-| LLM              | IBM Granite via watsonx.ai               |
-| Structured store | Turso (libSQL) — local SQLite fallback for dev |
-| Retrieval        | Custom term-overlap relevance scorer     |
-| Voice            | Browser Web Speech API                   |
+|------------------|-------------------------------------------|
+| Frontend         | React 19 + Vite 8 (`src/`)                |
+| Backend          | FastAPI (Python), `backend/`              |
+| LLM              | IBM Granite via watsonx.ai (`ibm/granite-4-h-small`, falling back to `mistralai/mistral-medium-2505`) |
+| Document parsing | IBM Docling (PDF/DOCX/Fountain/text → text)             |
+| Voice            | Google Gemini TTS (`gemini-2.5-flash-preview-tts`), falling back to the browser's Web Speech API |
+| Portrait art     | Pollinations.ai (Flux model), client-side, fixed seed per character |
+| 3D generation    | Headless Blender + CharMorph, exported as `.glb`, rendered with `<model-viewer>` |
+| Structured store | Turso (libSQL), local SQLite fallback for dev |
+| Retrieval        | Custom term-overlap relevance scorer      |
+| Build tool       | IBM Bob                                   |
 
 ### Design decisions
 
-- **Credentials server-side only.** `WATSONX_API_KEY` and `WATSONX_PROJECT_ID` live in `backend/.env` and are never sent to the browser. The frontend calls `/api/*` → Vite proxy → FastAPI backend, which holds all IBM credentials.
-- **Custom retrieval, no LangChain.** The retrieval layer (`backend/retrieval.py`) is a lightweight weighted term-overlap scorer — same algorithm as `src/lib/retrieval.js` but now running server-side before every generation call. Swappable behind the same interface if a vector store is added later.
-- **Turso (libSQL), not localStorage.** World state (worlds, assets) persists in Turso — required once the backend runs on Vercel's serverless functions, since a local SQLite file wouldn't survive a cold start or be shared across instances. `backend/db.py` falls back to a local SQLite file (via the same libsql engine) when `TURSO_DATABASE_URL` isn't set, so local dev works without a Turso account, but it's recommended to set up Turso locally too before deploying. The only thing still in `localStorage` is non-sensitive UI state (world ID reference + dark/light mode).
-- **Two-pass generation.** Content is generated in one call; a second lightweight classification call then independently assigns `type`, `era`, `faction`, and `mood` tags (Tier 2 auto-tagging, best-effort).
+- **Credentials server-side only.** The environmental variables and secrets are stored securely. The frontend calls `/api/*`, Vite proxy via FastAPI backend.
+- **Custom retrieval, no LangChain.** The retrieval layer (`backend/retrieval.py`) is a lightweight weighted term-overlap scorer. I
+- **Turso (libSQL), not localStorage.** World state (worlds, assets) persists in Turso. 
+- **Two-pass generation.** Content is generated in one call. A second lightweight classification call then independently assigns `type`, `era`, `faction`, and `mood` tags based on Tier 2 auto-tagging and best-effort.
 
-## Running locally
+## Demo
 
-### Prerequisites
+[https://www.youtube.com/watch?v=16FDa55rkA4]
+
+### Screens
+
+| Screen | Feature |
+|--------|---------|
+| Home | Landing page with quick-start cards, recent entries and stats |
+| Onboarding | World creation from a free-text description |
+| Import | Upload a script (PDF/DOCX/Fountain/Text) via IBM Docling. User can review queue before anything joins canon |
+| World Book | Canon library, search/filter, auto-tagging and consistency audit |
+| Create | Gap-Filling Engine that expands a fragment into a full canon entry, grounding context panel |
+| Characters | NPC generator with pinned traits, Gemini-cast voice, Pollinations portrait, lore Q&A and in-character chat |
+| Timeline | Time-Shift Mode which re-render any entry in another era |
+| Gallery | AI-generated 3D character models (Blender + CharMorph) and user can upload concept art, photos, or video for any asset |
+| Export | Compile canon and art into a Markdown, PDF, or DOCX pitch packet |
+| Settings | Connection test, roles, persona, theme, world name and reset |
+
+
+#### Prerequisites 
 
 - Node.js 18+
 - Python 3.11+
 - An IBM Cloud account with a watsonx.ai project and API key
 
-`backend/.env` is already set up with a working `WATSONX_API_KEY` and `WATSONX_PROJECT_ID` — no credentials setup needed, just install and run.
-
-> Note: `.env` is gitignored (see `.env.example` for the shape it takes) so it won't come through if you `git clone` the repo fresh — if that's how you got the code, ask Laura to send you `backend/.env` directly rather than trying to recreate it from the example file.
-
-### Backend
+#### Backend
 
 ```bash
 cd backend
@@ -42,27 +79,17 @@ pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 ```
 
-> PDF/DOCX upload (the Import file feature) needs Docling, which is deliberately left out of `requirements.txt` -- it's a heavy install (torch/transformers/etc.) that would blow past Vercel's per-function size limit, and the route is hardcoded off in the deployed app anyway. To test it locally, install from `requirements-local.txt` instead: `pip install -r requirements-local.txt`.
-
-Without any `TURSO_*` env vars set, this reads/writes the local `backend/worldbuilding.db` file exactly as before — no Turso account needed to get started.
-
-#### Setting up Turso (recommended before deploying)
+##### Setting up Turso 
 
 ```bash
 # Install the Turso CLI, then:
 turso db create backlot
-turso db show backlot --url        # -> TURSO_DATABASE_URL
-turso db tokens create backlot     # -> TURSO_AUTH_TOKEN
+turso db show backlot --url       
+turso db tokens create backlot    
 ```
 
-Add both values to `backend/.env` (see `backend/.env.example`). Once `TURSO_DATABASE_URL` is set, `db.py` connects to Turso instead of the local file. If you already have data in `backend/worldbuilding.db`, copy it over once:
 
-```bash
-cd backend
-python migrate_to_turso.py
-```
-
-### Frontend
+#### Frontend
 
 ```bash
 # In the project root
@@ -70,9 +97,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173. The Vite dev server proxies `/api/*` to the backend on port 8000. To confirm the backend can reach watsonx, hit `GET http://localhost:8000/api/ping`.
-
-## API endpoints
+#### API endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -87,17 +112,18 @@ Open http://localhost:5173. The Vite dev server proxies `/api/*` to the backend 
 | GET | /api/ping | Test watsonx connection |
 | GET | /api/models | List available foundation models |
 
-## Model chain
+#### Model chain
 
-The backend uses `ibm/granite-4-h-small` → `ibm/granite-3-3-8b-instruct` (see `MODEL_CHAIN` in `backend/watsonx.py`). IBM periodically deprecates model IDs. If you see "model not found" errors, call `GET /api/models` to see what's currently available on your project and update `MODEL_CHAIN`.
+The backend uses `ibm/granite-4-h-small`, falling back to `mistralai/mistral-medium-2505`.
 
-## Screens
+## Impact
 
-| Screen | Feature |
-|--------|---------|
-| Home | Landing — quick-start cards, recent entries, stats |
-| World Book | Canon library, search/filter, consistency audit |
-| Add to World | Gap-Filling Engine (expand idea or generate character), grounding context panel |
-| Characters | NPC cast generator, lore Q&A, character chat with Web Speech voice |
-| Timeline | Time-Shift Mode — re-render any entry in another era |
-| Settings | Connection test, roles, persona, theme, world name, reset |
+Backlot is not about replacing writers. It gives one person the production support that used to take a whole team. Therefore, getting from an idea to something pitchable does not depend on having that team.
+
+For a producer, the deliverable is the most crucial work. Export provides character breakdowns, a world bible, and art compiled into one real document. The review-gated Import pipeline will only joins canon with approval and the consistency audit in World Book allows document to be verified and trusted against the source material.The fallback model chain and credential handling were built as production concerns.
+
+
+
+## Link
+This application is hosted using Vercel. Note: Some functionalities are disabled due to technical constaints in production environment. The features like 3D generation and import functionality in production environment would be considered for future work. 
+[https://ibm-july-challenge-backlot.vercel.app/]
