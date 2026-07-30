@@ -16,7 +16,7 @@ AI worldbuilding assistant built on IBM Granite via watsonx.ai for the IBM AI Bu
 - **Custom retrieval, no LangChain.** The retrieval layer (backend/retrieval.py) is a lightweight weighted term-overlap scorer — same algorithm as src/lib/retrieval.js but now running server-side before every generation call. Swappable behind the same interface if a vector store is added later.
 - **Turso (libSQL), not localStorage.** World state (worlds, assets) persists in Turso — required once the backend runs on Vercel's serverless functions, since a local SQLite file wouldn't survive a cold start or be shared across instances. backend/db.py falls back to a local SQLite file (via the same libsql engine) when TURSO_DATABASE_URL isn't set, so local dev works without a Turso account, but it's recommended to set up Turso locally too before deploying. The only thing still in localStorage is non-sensitive UI state (world ID reference + dark/light mode).
 - **Two-pass generation.** Content is generated in one call; a second lightweight classification call then independently assigns type, era, faction, and mood tags (Tier 2 auto-tagging, best-effort).
-- 
+
 ## Running locally
 ### Prerequisites
 - Node.js 18+
