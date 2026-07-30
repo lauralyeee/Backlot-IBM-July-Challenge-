@@ -54,3 +54,4 @@ export function TypeIcon({ type, ...rest }) {
   return <Icon {...rest} />;
 }
 export const IconPlay = (p) => (<svg {...base} {...p}><path d="M7 4.5v15l13-7.5-13-7.5Z" fill="currentColor" stroke="none" /></svg>);
+export const IconMore = (p) => (<svg {...base} {...p}><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none" /></svg>);

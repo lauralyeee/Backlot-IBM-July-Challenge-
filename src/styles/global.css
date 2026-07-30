@@ -160,6 +160,9 @@ a { color: var(--accent-strong); }
   max-width: 760px;
 }
 
+/* mobile-only "More" trigger — hidden on desktop, shown in the bottom row on mobile */
+.nav-more-trigger { display: none; }
+
 @media (max-width: 900px) {
   .app-shell { grid-template-columns: 1fr; }
   .sidebar {
@@ -174,10 +177,11 @@ a { color: var(--accent-strong); }
     border-top: 1px solid var(--border-soft);
   }
   .sidebar .brand, .sidebar .nav-label-group, .sidebar .sidebar-footer { display: none; }
-  /* hide the group header toggle on mobile — sub-items render flat */
-  .sidebar .nav-group-header { display: none; }
-  .sidebar .nav-sublist { flex-direction: row; gap: 0; margin: 0; }
-  .sidebar .nav-subitem { padding-left: 2px; }
+  /* Idea Generation group and the Import/Export/Settings items move into the
+     mobile "More" sheet instead of cramming into the bottom row */
+  .sidebar .nav-group { display: none; }
+  .sidebar .nav-bottom-item { display: none; }
+  .nav-more-trigger { display: block; }
   .main-col { padding-bottom: 76px; }
   .content { padding: var(--space-4); }
 }
@@ -478,21 +482,89 @@ textarea.field { resize: vertical; font-family: var(--font-body); }
 
 .kbd-hint { font-size: 12px; color: var(--text-faint); }
 
-/* mobile nav overrides — declared after base .nav-list/.nav-item so they win the cascade */
+/* mobile nav overrides — declared after base .nav-list/.nav-item so they win the cascade.
+   Only 4 items ever reach this row now (Home, World Book, Gallery, More), so there's
+   room to give each one a real tap target instead of squeezing in every destination. */
 @media (max-width: 900px) {
   .nav-list { flex-direction: row; width: 100%; justify-content: space-around; gap: 0; }
   .nav-item {
     flex-direction: column;
     align-items: center;
-    gap: 2px;
-    padding: 6px 2px;
-    font-size: 10.5px;
+    gap: 3px;
+    padding: 8px 14px;
+    font-size: 11.5px;
     text-align: center;
     border-radius: 10px;
     min-width: 0;
   }
-  .nav-item .nav-icon { font-size: 19px; width: auto; }
+  .nav-item .nav-icon { font-size: 21px; width: auto; }
   .nav-item .nav-badge { display: none; }
+}
+
+/* mobile "More" sheet — houses Idea Generation + Import/Export/Settings */
+.mobile-more-overlay {
+  display: none;
+}
+@media (max-width: 900px) {
+  .mobile-more-overlay {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 60;
+    align-items: flex-end;
+  }
+  .mobile-more-sheet {
+    width: 100%;
+    max-height: 75vh;
+    overflow-y: auto;
+    background: var(--bg-elevated);
+    border-top: 1px solid var(--border-soft);
+    border-radius: 16px 16px 0 0;
+    padding: var(--space-4) var(--space-4) calc(var(--space-4) + 76px);
+  }
+  .mobile-more-sheet-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--text);
+    margin-bottom: var(--space-3);
+  }
+  .mobile-more-section-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-faint);
+    margin: var(--space-4) 0 var(--space-2);
+  }
+  .mobile-more-section-label:first-of-type { margin-top: 0; }
+  .mobile-more-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+  .mobile-more-list .nav-item {
+    flex-direction: row;
+    justify-content: flex-start;
+    text-align: left;
+    font-size: 14.5px;
+    padding: 11px var(--space-3);
+  }
+  .mobile-more-list .nav-item .nav-icon { font-size: 17px; width: 22px; }
+
+  /* keep the chat FAB clear of the bottom nav row */
+  .chat-launcher { bottom: calc(76px + 16px) !important; }
+  .chat-panel {
+    bottom: calc(76px + 16px + 64px) !important;
+    max-height: calc(100vh - 76px - 150px) !important;
+  }
 }
 
 /* ---------- camera-language motifs (used sparingly, per the design system: a

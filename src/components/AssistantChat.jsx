@@ -211,13 +211,14 @@ export default function AssistantChat() {
         type="button"
         aria-label={open ? "Close chat" : "Open chat"}
         onClick={() => setOpen((v) => !v)}
+        className="chat-launcher"
         style={styles.launcher}
       >
         {open ? "×" : <IconChat width={22} height={22} />}
       </button>
 
       {open && (
-        <div className="fade-in" style={styles.panel} role="dialog" aria-label="Granite assistant chat">
+        <div className="fade-in chat-panel" style={styles.panel} role="dialog" aria-label="Granite assistant chat">
           <div style={styles.header}>
             <div>
               <div style={styles.headerTitle}>Assistant</div>
