@@ -2,7 +2,7 @@ fastapi==0.115.5
 uvicorn[standard]==0.32.1
 httpx==0.28.1
 python-dotenv==1.0.1
-python-multipart==0.0.20  # Required by FastAPI's File/Form params -- /ingest/file's upload route needs this at import time (previously came in transitively via docling; explicit now that docling is gone)
+python-multipart==0.0.20  # Required by FastAPI's File/Form params -- /ingest/file's upload route needs this at import time 
 libsql==0.1.11  # Turso (libSQL) client -- db.py connection layer; sqlite3-compatible API, remote-over-HTTP for serverless
 reportlab==4.2.5   # Export enhancement: Markdown/Fountain -> PDF (character bios, location breakdown, beat sheet, pitch packet, sample scene)
 python-docx==1.1.2 # Export enhancement: Markdown/Fountain -> DOCX (same doc types as above)
