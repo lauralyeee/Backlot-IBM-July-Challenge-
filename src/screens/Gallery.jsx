@@ -1,6 +1,6 @@
 import "@google/model-viewer";
 import { useState, useEffect, useRef, useMemo } from "react";
-import { uploadModel3D, generateModel3D, getModel3DStatus, deleteModel3D } from "../lib/api";
+import { uploadModel3D, generateModel3D, getModel3DStatus, deleteModel3D, getCapabilities } from "../lib/api";
 import { Btn, EmptyState, Banner } from "../components/ui";
 import { IconUpload, IconCube, IconClose, IconTrash, TypeIcon } from "../components/Icons";
 import { TYPES, TYPE_META } from "../lib/worldData";
@@ -89,6 +89,19 @@ export default function Gallery({ world, assets, addAsset }) {
   const [error, setError] = useState("");
   const [focused, setFocused] = useState(null);
   const fileInputRef = useRef(null);
+
+  // Defaults to fully-enabled so nothing flashes disabled while the fetch
+  // is in flight (or greys out permanently if it fails) -- /api/capabilities
+  // only ever turns things OFF from this baseline, on Vercel today.
+  const [capabilities, setCapabilities] = useState({
+    model3dGeneration: true,
+    mediaUpload: true,
+    doclingImport: true,
+  });
+
+  useEffect(() => {
+    getCapabilities().then(setCapabilities).catch(() => {});
+  }, []);
 
   // Assets grouped into a row per category (Character, Location, ...) in
   // canonical TYPES order, skipping any type this world has nothing of --
@@ -237,10 +250,18 @@ export default function Gallery({ world, assets, addAsset }) {
               </Btn>
             </div>
             <div className="gallery-action-bar-buttons">
-              <Btn onClick={openFilePicker} disabled={uploadBusy} title="Upload a 3D model (.glb/.gltf), a concept-art image, or a short video for the selected asset">
+              <Btn
+                onClick={openFilePicker}
+                disabled={uploadBusy || !capabilities.mediaUpload}
+                title={
+                  capabilities.mediaUpload
+                    ? "Upload a 3D model (.glb/.gltf), a concept-art image, or a short video for the selected asset"
+                    : "Manual media upload isn't available in this hosted demo."
+                }
+              >
                 <IconUpload width={15} height={15} /> {uploadBusy ? "Uploading…" : "Upload media"}
               </Btn>
-              {selectedAsset.type === "character" ? (
+              {selectedAsset.type === "character" && capabilities.model3dGeneration ? (
                 <Btn
                   variant="primary"
                   onClick={() => handleGenerate(selectedAsset.id)}
@@ -254,9 +275,22 @@ export default function Gallery({ world, assets, addAsset }) {
               ) : (
                 <span
                   className="gallery-action-note"
-                  title="Blender/CharMorph generation drafts body-shape sliders from a character's canon sheet, so 3D generation only applies to character assets. Any type can still upload concept art or a video."
+                  title={
+                    selectedAsset.type !== "character"
+                      ? "Blender/CharMorph generation drafts body-shape sliders from a character's canon sheet, so 3D generation only applies to character assets. Any type can still upload concept art or a video."
+                      : "3D concept generation isn't available in this hosted demo (no Blender runtime on Vercel)."
+                  }
                 >
-                  <IconCube width={13} height={13} style={{ flexShrink: 0 }} /> 3D generation isn't available for a {selectedAsset.type}. Upload concept art or a video instead
+                  <IconCube width={13} height={13} style={{ flexShrink: 0 }} />{" "}
+                  {selectedAsset.type !== "character" ? (
+                    capabilities.mediaUpload
+                      ? <>3D generation isn't available for a {selectedAsset.type}. Upload concept art or a video instead</>
+                      : <>3D generation isn't available for a {selectedAsset.type}</>
+                  ) : (
+                    capabilities.mediaUpload
+                      ? "3D generation isn't available in this hosted demo. Upload concept art or a video instead"
+                      : "3D generation isn't available in this hosted demo"
+                  )}
                 </span>
               )}
               {selectedAsset.modelStatus === "ready" && (

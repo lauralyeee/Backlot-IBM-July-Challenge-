@@ -25,6 +25,8 @@ dist-ssr
 
 __pycache__/
 *.pyc
+.venv/
+backend/.venv/
 backend/worldbuilding.db
 backend/worldbuilding.db-shm
 backend/worldbuilding.db-wal

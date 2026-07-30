@@ -9,7 +9,7 @@ AI worldbuilding assistant built on IBM Granite via watsonx.ai, for the IBM AI B
 | Frontend         | React 19 + Vite 8 (src/)                |
 | Backend          | FastAPI (Python) — backend/             |
 | LLM              | IBM Granite via watsonx.ai               |
-| Structured store | SQLite (backend/worldbuilding.db)        |
+| Structured store | Turso (libSQL) — local SQLite fallback for dev |
 | Retrieval        | Custom term-overlap relevance scorer     |
 | Voice            | Browser Web Speech API                   |
 
@@ -17,7 +17,7 @@ AI worldbuilding assistant built on IBM Granite via watsonx.ai, for the IBM AI B
 
 - **Credentials server-side only.** `WATSONX_API_KEY` and `WATSONX_PROJECT_ID` live in `backend/.env` and are never sent to the browser. The frontend calls `/api/*` → Vite proxy → FastAPI backend, which holds all IBM credentials.
 - **Custom retrieval, no LangChain.** The retrieval layer (`backend/retrieval.py`) is a lightweight weighted term-overlap scorer — same algorithm as `src/lib/retrieval.js` but now running server-side before every generation call. Swappable behind the same interface if a vector store is added later.
-- **SQLite, not localStorage.** World state (worlds, assets) persists in SQLite. The only thing still in `localStorage` is non-sensitive UI state (world ID reference + dark/light mode).
+- **Turso (libSQL), not localStorage.** World state (worlds, assets) persists in Turso — required once the backend runs on Vercel's serverless functions, since a local SQLite file wouldn't survive a cold start or be shared across instances. `backend/db.py` falls back to a local SQLite file (via the same libsql engine) when `TURSO_DATABASE_URL` isn't set, so local dev works without a Turso account, but it's recommended to set up Turso locally too before deploying. The only thing still in `localStorage` is non-sensitive UI state (world ID reference + dark/light mode).
 - **Two-pass generation.** Content is generated in one call; a second lightweight classification call then independently assigns `type`, `era`, `faction`, and `mood` tags (Tier 2 auto-tagging, best-effort).
 
 ## Running locally
@@ -40,6 +40,24 @@ python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
+```
+
+Without any `TURSO_*` env vars set, this reads/writes the local `backend/worldbuilding.db` file exactly as before — no Turso account needed to get started.
+
+#### Setting up Turso (recommended before deploying)
+
+```bash
+# Install the Turso CLI, then:
+turso db create backlot
+turso db show backlot --url        # -> TURSO_DATABASE_URL
+turso db tokens create backlot     # -> TURSO_AUTH_TOKEN
+```
+
+Add both values to `backend/.env` (see `backend/.env.example`). Once `TURSO_DATABASE_URL` is set, `db.py` connects to Turso instead of the local file. If you already have data in `backend/worldbuilding.db`, copy it over once:
+
+```bash
+cd backend
+python migrate_to_turso.py
 ```
 
 ### Frontend

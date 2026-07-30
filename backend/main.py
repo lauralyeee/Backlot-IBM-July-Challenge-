@@ -34,6 +34,7 @@ Endpoints:
   DELETE /api/worlds/{id}/assets/{aid}/model3d         remove an asset's 3D concept model
   GET  /api/ping                       test watsonx connection
   GET  /api/models                     list available foundation models
+  GET  /api/capabilities               which optional features are enabled in this deployment
 """
 
 from __future__ import annotations
@@ -80,6 +81,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Hosted-deploy capability gates ───────────────────────────────────────────
+#
+# Vercel sets VERCEL=1 in every deployed function's environment. Two features
+# can't run there and are switched off outright rather than tested piecemeal:
+#   - 3D generation (headless Blender/CharMorph) needs a runtime Vercel's
+#     serverless functions don't have.
+#   - Manual media upload writes multi-MB files to local disk, which doesn't
+#     persist across Vercel's stateless/cold-started instances (no Blob
+#     integration wired up yet).
+# Both share IS_VERCEL since neither has a separate reason to diverge.
+# DOCLING_ENABLED is its own flag (same on/off shape, deliberately disabled
+# rather than untested) so PDF/DOCX parsing can be toggled independently if a
+# Docling-capable runtime is ever wired up later.
+IS_VERCEL = os.environ.get("VERCEL") == "1"
+
+DOCLING_ENABLED = os.environ.get("VERCEL") != "1"
 
 # 3D concept models (manual upload + Blender/CharMorph output) are served as
 # static files, never stored as DB blobs -- multi-MB binaries are a bad fit
@@ -666,6 +684,13 @@ async def ingest_file(world_id: str, file: UploadFile = File(...), title: str = 
     if not data:
         raise HTTPException(400, "Uploaded file is empty")
 
+    if ext in ing.DOCLING_UPLOAD_EXTENSIONS and not DOCLING_ENABLED:
+        raise HTTPException(
+            501,
+            "PDF/DOCX parsing (IBM Docling) isn't available in this hosted demo — "
+            "paste the text instead, or upload a .txt/.fountain file.",
+        )
+
     try:
         if ext in ing.PLAIN_TEXT_UPLOAD_EXTENSIONS:
             text = ing.decode_plain_text_upload(data)
@@ -1151,6 +1176,12 @@ async def upload_model3d(world_id: str, asset_id: int, file: UploadFile = File(.
     only option for lore/location/event/other entries, which have no 3D
     generation path, and both remain available for characters too alongside
     Blender/CharMorph generation."""
+    if IS_VERCEL:
+        raise HTTPException(
+            501,
+            "Manual media upload isn't available in this hosted deployment "
+            "(no persistent file storage configured on Vercel).",
+        )
     _require_world(world_id)
     asset = db.get_asset(asset_id)
     if not asset or asset.get("worldId") != world_id:
@@ -1192,6 +1223,12 @@ async def generate_model3d(world_id: str, asset_id: int, background_tasks: Backg
     Generation takes real time (not instant like the portrait endpoint), so
     this returns immediately with model_status="pending" and does the actual
     work in a background task; the frontend polls the status endpoint below."""
+    if IS_VERCEL:
+        raise HTTPException(
+            501,
+            "3D concept generation isn't available in this hosted deployment "
+            "(no Blender runtime on Vercel).",
+        )
     _require_world(world_id)
     asset = db.get_asset(asset_id)
     if not asset or asset.get("worldId") != world_id:
@@ -1758,3 +1795,17 @@ async def models():
         return {"models": model_list}
     except Exception as exc:
         raise HTTPException(500, str(exc))
+
+
+@app.get("/api/capabilities")
+def capabilities():
+    """Which optional features this deployment supports. Gallery.jsx and
+    Import.jsx fetch this once on load to grey out the buttons/affordances
+    for features that are switched off here (rather than each screen
+    guessing from the hostname) -- always all-true locally, all-false on
+    Vercel today."""
+    return {
+        "model3dGeneration": not IS_VERCEL,
+        "mediaUpload": not IS_VERCEL,
+        "doclingImport": DOCLING_ENABLED,
+    }

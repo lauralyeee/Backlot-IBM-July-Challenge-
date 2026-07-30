@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import {
   ingestText, ingestFile, commitIngested, updateIngestedAsset,
-  listDocuments,
+  listDocuments, getCapabilities,
 } from "../lib/api";
 import { TYPES, TYPE_META } from "../lib/worldData";
 import { Field, Btn, Chip, Busy, Banner, Tag, EmptyState } from "../components/ui";
@@ -10,37 +10,215 @@ import {
   IconEdit, IconClock, IconChevronDown,
 } from "../components/Icons";
 
-const SAMPLE_SCRIPT = `EXT. THE OUTER HARBOUR - BEFORE DAWN
+const SAMPLE_SCRIPT = `FADE IN:
 
-Fog sits low over the water. A single lamp burns at the end of the stone jetty.
+INT. WONKA FACTORY - CHOCOLATE ROOM - CONTINUOUS
 
-MARETH SOLL (50s), harbourmaster, walks the length of the jetty with a ledger
-under one arm. She has kept this ledger for thirty years and has never once
-shown it to the council.
+As OPENING TITLES begin, we find ourselves in a swirl of liquid chocolate,
+spinning clockwise down a funnel. The accompanying MUSIC is jaunty but
+mysterious -- we're clearly in for a ride.
 
-MARETH
-    (to herself)
-    Three ships out. Two ships back. Same as the last four winters.
+We emerge as the chocolate pours into a mold, one of hundreds inching along
+a conveyor belt. This isn't any ordinary factory. Bathed in amber light, the
+machinery is ornate and polished, with shiny brass joints and spindly
+levers. Complicated gears tug on oiled canvas ropes, slipping through
+swinging pulleys.
 
-A younger figure waits at the jetty's end: DERIN VASK, ship's navigator,
-still wearing the salt-stained coat he arrived in.
+As the chocolate bars continue along the belt, great bellows swell and
+gently PUFF on them. A moment later, a press SLAMS down, lifting to reveal
+the word it has imprinted:
 
-DERIN
-    You said you'd tell me what happened to the Kestrel.
+WONKA
 
-MARETH
-    I said I'd tell you when you were ready to hear it. Ten years later,
-    you're still asking the same question the same way.
+Still moving, we look back along the belt as hundreds of bars line up to be
+stamped. The molds suddenly flip over, dumping each bar onto its own set of
+wire fingers. These "hands" zip straight up along an elevator track.
 
-She sets the ledger on the stone between them. Inside its cover, stitched flat,
-is a brass tide-key: the only one that still opens the old lockhouse.
+We RISE with them, a good hundred feet up, getting a bird's eye view of the
+factory floor. It's quite dark except for the golden lights right along the
+machinery itself. Strangely, we don't see a single person working.
 
-DERIN
-    And this?
+As the chocolate reaches the tip-top of the track, a mechanical arm THWACKS
+a small package to the underside of each bar. Just as suddenly, the track
+flings each bar over the top.
 
-MARETH
-    That's how you'll find out. But once you turn it, the harbour will know
-    you did.`;
+The candy bars plummet in free-fall, until the tiny packages pop open,
+revealing parachutes. Their descent slows until a pair of giant scissors
+deftly SNIPS the strings on each chute, leaving the candy to drop onto
+another conveyor belt.
+
+Each piece of chocolate lands perfectly square on its own sheet of foil
+paper. Looking ahead, we can see the machine that bends the foil around the
+chocolate. But before we get there,
+
+A HUMAN HAND reaches in and lifts five bars off the belt.
+
+We only see this man's hands and the cuffs of his velvet jacket as he sets a
+thin GOLDEN TICKET on the back of each of the bars. One by one, he places
+these five special bars back in the queue, where the foil-folding machine
+does its job, perfectly encasing each piece.
+
+Another device attaches the paper wrapper, printed to read: WONKA BAR.
+
+Further down the belt, we find stacking and sorting machines loading up
+boxes and cases of bars. A mechanical stamp THUMPS down on each cardboard
+box, marking its final destination: TOKYO, SPRINGFIELD, BRIGHTON, ADDIS
+ABABA.
+
+CUT TO:
+
+EXT. LOADING DOCK - DAY
+
+Huge snowflakes drift down out of an icy sky that is the color of steel.
+WORKMEN load pallets of Wonka candy onto waiting trucks.
+
+It's hard to say what time it is, exactly: there's no sun to be found, and
+the streetlights are always on. For that matter, it's hard to say what year
+it is. From the trucks, to the clothes, to the typeface on the clipboard,
+the world seems to exist outside of ordinary calendars. All we can be
+certain of is that it's winter.
+
+The last container loaded, the FOREMAN bangs on the side of the lead truck.
+The convoy moves out.
+
+EXT. WONKA FACTORY - LOADING AREA - DAY
+
+We see the trucks are parked along the wall of the Wonka factory. The
+loading area is outside of the factory itself.
+
+As the trucks RUMBLE down the snowy street, they attract the attention of a
+WOMAN WITH A PRAM, A SALESMAN WITH A SCARF, and a ten-year old boy named
+CHARLIE BUCKET, who is on his way home from school.
+
+We FOCUS IN on Charlie as he watches the procession.
+
+NARRATOR (V.O.)
+    This is the story of an ordinary little boy named Charlie Bucket. He
+    was not faster, or stronger, or more clever than other children.
+
+Indeed, Charlie is barely strong enough to stand in the wind. He'd be the
+runt of the litter if he had any brothers or sisters.
+
+As the Wonka trucks go by, Charlie wipes his runny nose with his mitten.
+
+NARRATOR (V.O.) (CONT'D)
+    His family was not rich, or powerful, or well-connected. In fact, they
+    barely had enough to eat.
+
+After the last truck passes, Charlie continues walking home to a tiny
+dilapidated house built just feet from the road.
+
+NARRATOR (V.O.)
+    Yet Charlie Bucket was the luckiest boy in the entire world. He just
+    didn't know it yet.
+
+Charlie stomps the snow off his feet and goes inside. We pull back VERY WIDE
+to find the shack house is just a stone's throw from the massive Wonka
+factory -- its shadow literally falls across the tiny house.
+
+TITLE OVER: Charlie and the Chocolate Factory
+
+INT. THE LITTLE HOUSE - NIGHT
+
+Flakes of snow drift in through cracks in the roof, falling down on Charlie,
+who is doing his homework at the kitchen table. Ever-practical, he opens an
+umbrella for protection and keeps right on working.
+
+Meanwhile, his MOTHER chops cabbage for the soup pot. Mother Bucket is an
+ever-exhausted woman in her late 30's, run ragged from taking care of
+Charlie and the four invalid grandparents. Many nights, she's too tired to
+worry, and too worried to sleep.
+
+There are only two rooms in this place altogether. This main room is the
+kitchen, the family room, the foyer, the closet and the bedroom for Charlie
+and his parents.
+
+The front door swings open, revealing Charlie's FATHER, a lanky,
+hard-working man in his late 30's who manages to be grateful for his
+blessings, however slight they are.
+
+FATHER
+    Evening, Buckets!
+
+CHARLIE
+    Hi, Dad!
+
+MOTHER
+    The soup's almost ready. I don't suppose there's anything extra to
+    put...
+
+Off her husband's look, there's clearly no more food coming. Ever chipper...
+
+MOTHER (CONT'D)
+    Well. Nothing goes better with cabbage than cabbage.
+
+She begins to chop up another head.
+
+FATHER
+    Charlie, I found something I think you'll like!
+
+He empties out his coat pockets on the table, revealing a handful of small
+white plastic caps. With a gasp, Charlie's eyes go wide as he picks one out
+of the pile.
+
+CUT TO:
+
+INT. TOOTHPASTE FACTORY - DAY [PAST]
+
+Plump tubes of uncapped toothpaste slide along a conveyor belt.
+
+NARRATOR (V.O.)
+    Charlie's father worked in the local toothpaste factory.
+
+As each tube moves past, Father frantically screws on a cap. It's a
+needlessly rushed and tedious job.
+
+NARRATOR (V.O.) (CONT'D)
+    The hours were long, and the pay was terrible. Yet occasionally, there
+    were unexpected surprises.
+
+One of Father's plastic caps won't screw on right. He holds it up for a
+closer look, and finds that it's misshapen. In fact, it looks something
+like a human head.
+
+FATHER
+    Huh.
+
+MATCH CUT TO:
+
+INT. THE LITTLE HOUSE - NIGHT
+
+Charlie holds the same little plastic cap.
+
+CHARLIE
+    It's exactly what I need!
+
+Excited, he runs into the other room.
+
+INT. GRANDPARENTS' BEDROOM - NIGHT
+
+The room's one bed is dedicated to the four grandparents, because they are
+so old and tired -- they never get out of it. Two face one direction; two
+face the other. They are as shriveled as prunes and as bony as skeletons.
+
+Charlie dives under the bed, digging for something. The old people look over
+the edge of the bed, but all they see are Charlie's feet sticking out.
+
+GRANDPA JOE is 96-years old, yet still approaches life with childlike zeal
+and optimism. He's always quick to excite:
+
+GRANDPA JOE
+    What is it, Charlie?
+
+GRANDPA GEORGE
+    House on fire?
+
+GRANDMA GEORGINA
+    (panicked)
+    Fire, where?
+
+GRANDMA JOSEPHINE
+    Nowhere, dear.`;
 
 // Derived from worldData's TYPES/TYPE_META (the same source WorldBook.jsx
 // filters against) instead of a separate hardcoded list -- keeps Import's
@@ -162,6 +340,19 @@ export default function Import({ world, addAsset }) {
   const [expandedImportId, setExpandedImportId] = useState(null);
   const fileInputRef = useRef(null);
 
+  // Defaults to fully-enabled so nothing flashes disabled while the fetch
+  // is in flight (or greys out permanently if it fails) -- /api/capabilities
+  // only ever turns things OFF from this baseline, on Vercel today.
+  const [capabilities, setCapabilities] = useState({
+    model3dGeneration: true,
+    mediaUpload: true,
+    doclingImport: true,
+  });
+
+  useEffect(() => {
+    getCapabilities().then(setCapabilities).catch(() => {});
+  }, []);
+
   const counts = useMemo(() => ({
     total: proposed.length,
     character: proposed.filter((p) => p.type === "character").length,
@@ -212,6 +403,13 @@ export default function Import({ world, addAsset }) {
     if (!file) return;
     const ext = extOf(file.name);
     const usesDocling = DOCLING_EXTENSIONS.has(ext);
+    if (usesDocling && !capabilities.doclingImport) {
+      setError(
+        "PDF/DOCX parsing (IBM Docling) isn't available in this hosted demo — "
+        + "paste the text instead, or upload a .txt/.fountain file."
+      );
+      return;
+    }
     setBusy(true); setError(""); setNotice(""); setStaged(null); setProposed([]); setAddedCount(0);
     setPipelineMode(usesDocling ? "docling" : "text");
     setBusyLabel(
@@ -443,17 +641,33 @@ export default function Import({ world, addAsset }) {
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <Btn small variant="ghost" disabled={busy} onClick={() => fileInputRef.current?.click()} title="Upload a file to extract entries from (PDF/DOCX parsed by IBM Docling; TXT/Fountain read directly), or drag one onto this card">
-              <IconImport width={15} height={15} /> Upload PDF, DOCX, TXT, or Fountain
+            <Btn
+              small
+              variant="ghost"
+              disabled={busy}
+              onClick={() => fileInputRef.current?.click()}
+              title={
+                capabilities.doclingImport
+                  ? "Upload a file to extract entries from (PDF/DOCX parsed by IBM Docling; TXT/Fountain read directly), or drag one onto this card"
+                  : "Upload a TXT or Fountain file to extract entries from, or drag one onto this card. PDF/DOCX parsing (IBM Docling) isn't available in this hosted demo."
+              }
+            >
+              <IconImport width={15} height={15} /> {capabilities.doclingImport ? "Upload PDF, DOCX, TXT, or Fountain" : "Upload TXT or Fountain"}
             </Btn>
             <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
-              PDF/DOCX parsed by IBM Docling; TXT/Fountain read directly. Either way, it's extracted the same way as pasted text.
+              {capabilities.doclingImport
+                ? "PDF/DOCX parsed by IBM Docling; TXT/Fountain read directly. Either way, it's extracted the same way as pasted text."
+                : "PDF/DOCX parsing (IBM Docling) isn't available in this hosted demo — paste the text instead, or upload a .txt/.fountain file."}
             </span>
           </div>
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pdf,.docx,.txt,.fountain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+            accept={
+              capabilities.doclingImport
+                ? ".pdf,.docx,.txt,.fountain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                : ".txt,.fountain,text/plain"
+            }
             onChange={onFileSelected}
             style={{ display: "none" }}
           />

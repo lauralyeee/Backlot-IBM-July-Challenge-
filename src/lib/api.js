@@ -458,3 +458,12 @@ export async function widgetChat(messages, screen, onDelta) {
 
 export const pingBackend = () => req("GET", "/ping");
 export const listModels = () => req("GET", "/models");
+
+/**
+ * Which optional features this deployment supports — always all-true
+ * locally, all-false on Vercel today (3D generation, manual media upload,
+ * Docling PDF/DOCX parsing). Gallery.jsx and Import.jsx fetch this once on
+ * load to grey out the affordances for whatever's disabled.
+ * @returns {{ model3dGeneration: boolean, mediaUpload: boolean, doclingImport: boolean }}
+ */
+export const getCapabilities = () => req("GET", "/capabilities");
