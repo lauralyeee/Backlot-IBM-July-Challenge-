@@ -1,18 +1,18 @@
 # Backlot
 
-Backlot is a worldbuilding workspace for writers, game designers, and interactive media teams, with an AI co-pilot built in. Built by Laura Lai and Henry Khoo for the IBM Bob AI Builders Challenge, July 2026.
+Backlot is a worldbuilding workspace for writers, game designers, and interactive media teams with an AI co-pilot built in. Built by Laura Lai and Henry Khoo for the IBM Bob AI Builders Challenge, July 2026.
 
 ## Problem
 
-Coming up with a story or a world was never really the hard part. The hard part is everything that happens after: keeping character details straight across dozens of entries, making sure episode nine doesn't quietly contradict episode two, and eventually turning all of it into something you can actually hand to a producer. Somewhere in there, every character also needs a real voice and a face, not just a paragraph of description, because a producer or director trying to visualize, concept, or cast a project needs to actually feel who these people are. Most solo writers and small teams don't have a writers' room or an art department to do any of that for them, so a lot of good worldbuilding stays stuck in a messy notes doc.
+Writers, producers, and worldbuilders working on games and interactive media rarely struggle with the story itself. The hard part is everything that happens after such as keeping character details straight across dozens of entries, making sure episode nine doesn't quietly contradict episode two, and eventually turning all of it into something you can actually hand to a producer. Every character also needs a real voice and a face, and not just a paragraph of description. A producer or director trying to visualize, concept, or cast a project needs to actually feel who these people are. Most solo writers and small teams don't have a writers' room or an art department to do any of that for them, so a lot of good worldbuilding stays stuck in a messy notes doc.
 
 ## Solution
 
-Feed Backlot whatever you already have, a single sentence, a full pitch script, half an idea, and it grows that into a structured, internally consistent world: characters, locations, a timeline, all grounded in whatever canon already exists so nothing comes back generic or contradicts what you've already built.
+Feed Backlot whatever you already have, a single sentence, a full pitch script, half an idea, and it grows that into a structured, internally consistent world. The characters, locations, and a timeline are all grounded in whatever canon already exists so nothing comes back generic or contradicts what you've already built.
 
-You can paste or upload a script, treatment, or pitch document and Backlot will read it and propose characters, locations, and timeline events for you to approve, nothing gets added without a review step. You can type one line and watch it expand into a full character or lore entry. Generated characters can be cast with a real, AI generated voice and chatted with in character. Any asset can get a portrait or a piece of concept art, either generated or uploaded from your own reference material. Timeline entries can be shifted into a different era to see how a character or place looked years earlier or later, without breaking anything already written. And when it's time to actually pitch the project, Export compiles the world into a real document (character bios, a world bible, a beat sheet, a full pitch packet, or a Fountain format script) instead of leaving everything trapped inside the app.
+You can paste or upload a script, treatment, or pitch document and Backlot will read it and propose characters, locations, and timeline events for you to approve. No changes get added without a review step. You can type one line and watch it expand into a full character or lore entry. Generated characters can be cast with a real, AI generated voice and chatted with in character. Any asset can get a portrait or a piece of concept art, either generated or uploaded from your own reference material. Timeline entries can be shifted into a different era to see how a character or place looked years earlier or later without breaking anything already written. When it's time to actually pitch the project, Export compiles the world into a real document. The character bios, a world bible, a beat sheet, a full pitch packet, or a Fountain format script instead of leaving everything trapped inside the app.
 
-The goal isn't to replace the writer. It's to give one person the production support that used to take a whole team, so getting from an idea to something pitchable doesn't depend on having that team.
+The goal isn't to replace the writer. It's to give one person the production support that used to take a whole team. The process of getting from an idea to something pitchable doesn't depend on having that team.
 
 ## Selected challenge theme
 
@@ -42,13 +42,12 @@ Export is the one part of the pipeline that makes no AI calls at all. It compile
 | Portraits and concept art | **Pollinations.ai** (Flux model) |
 | 3D concept models | Headless **Blender** + **CharMorph**, viewed via **`<model-viewer>`** |
 
-A few other decisions worth knowing if you're reading the code: credentials stay server side only, `WATSONX_API_KEY` and `WATSONX_PROJECT_ID` live in `backend/.env` and are never sent to the browser, the frontend only ever talks to `/api/*`. World and asset data lives in **SQLite**, not `localStorage`; the browser only keeps a small non sensitive UI preference. Auto tagging runs as a second, independent classification call after generation rather than being folded into the first prompt, so a bad tag never has to compromise the entry's actual content.
 
 ## How IBM Bob was used
 
 IBM Bob was the primary development tool for this project. The large majority of the frontend screens and components, and the FastAPI backend's endpoints, generation logic, ingestion pipeline, and export system, were written by Bob from scoped, written prompts rather than typed by hand.
 
-To keep Bob's output consistent across a project built over many separate sessions, the repo carries an `AGENTS.md` file that Bob reads before making changes. It records a short list of locked architectural decisions (no LangChain or vector store, credentials never leave the backend, SQLite only, the two pass auto tagging design) plus a set of non obvious patterns in the codebase that aren't visible from the code alone, like the snake_case to camelCase conversion boundary between SQLite and the API, or why `src/lib/storage.js` is a legacy file that shouldn't be reused. That file is what let Bob keep extending the app correctly without re deriving the same context and design decisions from scratch every session.
+To keep Bob's output consistent across a project built over many separate sessions, the repo carries an `AGENTS.md` file that Bob reads before making changes. It records a short list of locked architectural decisions such as no LangChain or vector store, credentials never leave the backend, SQLite only, and the two pass auto tagging design. There is also a set of non obvious patterns in the codebase that aren't visible from the code alone like the snake_case to camelCase conversion boundary between SQLite and the API or why `src/lib/storage.js` is a legacy file that shouldn't be reused. That file is what let Bob keep extending the app correctly without re deriving the same context and design decisions from scratch every session.
 
 ## API endpoints
 
