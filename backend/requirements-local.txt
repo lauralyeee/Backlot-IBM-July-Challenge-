@@ -1,0 +1,12 @@
+# Local-dev superset of requirements.txt -- adds Docling so PDF/DOCX upload
+# (Import file feature) works when running the backend locally.
+#
+# Do NOT use this file for the Vercel deployment: Docling pulls in
+# torch/transformers/onnxruntime and pushes the Python function bundle well
+# past Vercel's 500 MB per-function limit. main.py already disables the
+# Docling-dependent route on Vercel (DOCLING_ENABLED = VERCEL != "1"), so
+# there's no functional loss from keeping it out of the deployed bundle.
+#
+# Usage: pip install -r requirements-local.txt
+-r requirements.txt
+docling==2.97.0  # PDF/DOCX -> markdown for Import file upload; local dev only

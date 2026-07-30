@@ -3,6 +3,12 @@ uvicorn[standard]==0.32.1
 httpx==0.28.1
 python-dotenv==1.0.1
 libsql==0.1.11  # Turso (libSQL) client -- db.py connection layer; sqlite3-compatible API, remote-over-HTTP for serverless
-docling==2.97.0  # PDF/DOCX -> markdown for Import file upload; heavy install, run locally not in sandbox
 reportlab==4.2.5   # Export enhancement: Markdown/Fountain -> PDF (character bios, location breakdown, beat sheet, pitch packet, sample scene)
 python-docx==1.1.2 # Export enhancement: Markdown/Fountain -> DOCX (same doc types as above)
+
+# Docling (PDF/DOCX -> markdown for Import file upload) is intentionally NOT
+# listed here. It pulls in torch/transformers/onnxruntime etc. and its
+# transitive deps push the Vercel Python function bundle past the 500 MB
+# limit -- and DOCLING_ENABLED in main.py is already hardcoded off on Vercel
+# (VERCEL=="1"), so it's dead weight in the deployed function anyway.
+# For local dev, install it separately: pip install -r requirements-local.txt

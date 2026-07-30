@@ -42,6 +42,8 @@ pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 ```
 
+> PDF/DOCX upload (the Import file feature) needs Docling, which is deliberately left out of `requirements.txt` -- it's a heavy install (torch/transformers/etc.) that would blow past Vercel's per-function size limit, and the route is hardcoded off in the deployed app anyway. To test it locally, install from `requirements-local.txt` instead: `pip install -r requirements-local.txt`.
+
 Without any `TURSO_*` env vars set, this reads/writes the local `backend/worldbuilding.db` file exactly as before — no Turso account needed to get started.
 
 #### Setting up Turso (recommended before deploying)

@@ -62,7 +62,7 @@ def _get_converter():
         except ImportError as e:
             raise RuntimeError(
                 "Docling isn't installed on this backend. Run `pip install "
-                "docling` (see backend/requirements.txt) and restart the server."
+                "-r backend/requirements-local.txt` and restart the server."
             ) from e
         # Converter init loads Docling's layout/OCR models -- expensive (can be
         # several seconds, and downloads models on first run). Built once and

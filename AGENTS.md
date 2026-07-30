@@ -60,7 +60,7 @@ All three generation endpoints (`/generate`, `/audit`, `/ask`) have try/except b
 ```bash
 # Terminal 1 — backend (must run from backend/ directory)
 cd backend
-pip install -r requirements.txt
+pip install -r requirements.txt   # add requirements-local.txt instead if you need Docling (PDF/DOCX import) -- kept out of the deployed bundle, see requirements.txt comment
 cp .env.example .env   # fill WATSONX_API_KEY and WATSONX_PROJECT_ID
 uvicorn main:app --reload --port 8000
 
