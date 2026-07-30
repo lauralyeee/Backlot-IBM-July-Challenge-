@@ -124,8 +124,10 @@ For a producer, the deliverable is the most crucial work. Export provides charac
 
 
 
-## Link
-This application is hosted using Vercel. Note: Some functionalities are disabled due to technical constaints in production environment. The features like 3D generation and import functionality in production environment would be considered for future work. 
+## Hosting platform and link
 [Backlot](https://ibm-july-challenge-backlot.vercel.app/)
+
+This application is hosted using Vercel. Note: Some functionalities are disabled due to technical constaints in production environment. The features like 3D generation and import functionality in production environment would be considered for future work. 
+
 
 
