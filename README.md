@@ -1,6 +1,6 @@
 # Backlot
 
-AI worldbuilding assistant built on IBM Granite via watsonx.ai, for the IBM AI Builders Challenge (July 2026, Creative Industries theme).
+AI worldbuilding assistant built on IBM Granite via watsonx.ai for the IBM AI Builders Challenge (July 2026, Creative Industries theme).
 
 ## Architecture
 
