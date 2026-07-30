@@ -13,6 +13,7 @@ Endpoints:
   POST /api/worlds/{id}/audit          consistency audit
   POST /api/worlds/{id}/ask            Q&A (lore or character-in-character)
   POST /api/personas/custom            generate a persona from a free-text description
+  POST /api/widget-chat                floating assistant widget (general app help, SSE streamed, no world context)
   POST /api/worlds/{id}/ingest                      script/doc → extracted proposals (read-only, Feature 1)
   POST /api/worlds/{id}/ingest/commit               persist writer-approved extracted entries
   POST /api/worlds/{id}/ingest/update/{asset_id}    overwrite an existing asset from a matched extraction
@@ -50,6 +51,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, BackgroundTasks, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -268,6 +270,16 @@ class VoiceConfirmRequest(BaseModel):
 
 class VoiceSpeakRequest(BaseModel):
     text: str
+
+
+class WidgetChatMessage(BaseModel):
+    role: str       # "user" | "assistant"
+    content: str
+
+
+class WidgetChatRequest(BaseModel):
+    messages: list[WidgetChatMessage]
+    screen: str | None = None   # current app tab id, see Sidebar.jsx nav ids
 
 
 # ── Custom persona endpoint ───────────────────────────────────────────────────
@@ -1775,6 +1787,78 @@ async def ask(world_id: str, body: AskRequest):
         if body.mode == "lore":
             return {"reply": gen.offline_answer(body.question, assets), "offline": True}
         return {"reply": f"They say nothing. The service is unreachable ({exc}).", "offline": True, "emotion": "neutral"}
+
+
+# ── Floating assistant widget (general-purpose, not world/canon-grounded) ───
+#
+# Powers src/components/AssistantChat.jsx's floating chat, mounted on every
+# screen. Unlike /ask above, this never reads world/asset state — it's just
+# app-usage help (what a screen does, how a feature works), so no world_id
+# in the path. Streams via SSE so the widget can render tokens as they
+# arrive; see src/lib/api.js widgetChat() for the exact wire format this
+# must produce: newline-delimited "data: {...}\n\n" chunks, each either
+# {"delta": "..."} (a text chunk) or, on total model failure, a single
+# {"delta": "...", "offline": true} event carrying the whole fallback reply.
+
+_SCREEN_LABELS = {
+    "home": "the home/dashboard screen",
+    "canon": "the World Book (canon assets: characters, locations, lore, events)",
+    "gallery": "the Gallery (concept art / 3D model generation)",
+    "create": "the Create screen (turning an idea fragment into a new entry)",
+    "characters": "the Characters screen (in-character chat)",
+    "timeline": "the Timeline / Time-Shift Mode screen (rewinding entries to another era)",
+    "import": "the Import screen (importing a script/doc to auto-extract entries)",
+    "export": "the Export screen (compiling canon into a document)",
+    "settings": "the Settings screen (era management, appearance)",
+    "onboarding": "the new-world onboarding flow",
+}
+
+
+def _widget_system_prompt(screen: str | None) -> str:
+    where = _SCREEN_LABELS.get(screen or "", None)
+    context = f" The writer is currently on {where}." if where else ""
+    return (
+        "You are the general-purpose help assistant for Backlot, an AI worldbuilding app for "
+        "writers (screenwriters, novelists, game/TTRPG worldbuilders). Backlot lets a writer "
+        "build a World Book of canon (characters, locations, lore, events) across multiple eras, "
+        "generate new entries that fill gaps in what's already established, chat in-character "
+        "with their characters, import an existing script/document to auto-extract entries, "
+        "run a consistency audit, and export compiled documents (Markdown/Fountain/PDF/DOCX)."
+        + context
+        + " Answer questions about how to use the app and general writing/worldbuilding advice. "
+        "You do NOT have access to this writer's specific world or canon — if asked something "
+        "that requires that (e.g. \"what's my character's backstory\"), say so plainly and point "
+        "them to the relevant screen instead of guessing. Keep replies short: 1-3 sentences unless "
+        "more detail is clearly needed."
+    )
+
+
+@app.post("/api/widget-chat")
+async def widget_chat(body: WidgetChatRequest):
+    system_prompt = _widget_system_prompt(body.screen)
+    messages = [wx.chat_message("system", system_prompt)]
+    for m in body.messages:
+        role = "user" if m.role == "user" else "assistant"
+        messages.append(wx.chat_message(role, m.content))
+
+    async def event_stream():
+        started = False
+        try:
+            async for delta in wx.generate_messages_stream(messages, max_tokens=400):
+                started = True
+                yield f"data: {json.dumps({'delta': delta})}\n\n"
+        except Exception:
+            if not started:
+                fallback = (
+                    "I'm having trouble reaching the assistant service right now. "
+                    "Try again in a moment, or check AGENTS.md if you're running this locally."
+                )
+                yield f"data: {json.dumps({'delta': fallback, 'offline': True})}\n\n"
+            # If streaming had already started, the writer keeps whatever text
+            # arrived before the failure — same "don't reset mid-stream" rule
+            # generate_messages_stream itself follows.
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 # ── Diagnostics ───────────────────────────────────────────────────────────────
