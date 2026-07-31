@@ -107,11 +107,17 @@ Home/ Landing page
 World Book
 <img width="1499" height="767" alt="image" src="https://github.com/user-attachments/assets/a1f186e6-5c20-4631-92ea-c326aa683b20" />
 
-Gallery
-<img width="1499" height="767" alt="image" src="https://github.com/user-attachments/assets/40855e77-4e22-4f2f-b5f4-762640d61b99" />
+Add to World
+<img width="1498" height="770" alt="image" src="https://github.com/user-attachments/assets/eb3bd2b4-733c-4587-89a9-0a7e2caa4ccb" />
 
 Characters
 <img width="1499" height="767" alt="image" src="https://github.com/user-attachments/assets/ad7f343b-4d2f-42c8-a8ff-d72829422766" />
+
+Timeline
+<img width="1498" height="770" alt="image" src="https://github.com/user-attachments/assets/83704397-d3da-4eb4-a79c-bf3fb2df808d" />
+
+Gallery
+<img width="1499" height="767" alt="image" src="https://github.com/user-attachments/assets/40855e77-4e22-4f2f-b5f4-762640d61b99" />
 
 Import
 <img width="1499" height="767" alt="image" src="https://github.com/user-attachments/assets/774dd69d-bf65-48c2-850c-60e8e4ea99f1" />
