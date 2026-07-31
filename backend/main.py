@@ -66,6 +66,7 @@ import ingestion as ing
 import export as exp
 import model3d as m3d
 import voice as vc
+import vercel_blob
 
 # ── App lifecycle ────────────────────────────────────────────────────────────
 
@@ -86,17 +87,23 @@ app.add_middleware(
 
 # ── Hosted-deploy capability gates ───────────────────────────────────────────
 #
-# Vercel sets VERCEL=1 in every deployed function's environment. Two features
-# can't run there and are switched off outright rather than tested piecemeal:
+# Vercel sets VERCEL=1 in every deployed function's environment.
 #   - 3D generation (headless Blender/CharMorph) needs a runtime Vercel's
-#     serverless functions don't have.
-#   - Manual media upload writes multi-MB files to local disk, which doesn't
-#     persist across Vercel's stateless/cold-started instances (no Blob
-#     integration wired up yet).
-# Both share IS_VERCEL since neither has a separate reason to diverge.
+#     serverless functions don't have -- switched off outright, IS_VERCEL-gated.
+#   - Manual media upload used to be gated the same way (local disk writes
+#     don't persist across Vercel's stateless/cold-started instances), but now
+#     writes to Vercel Blob when IS_VERCEL is true instead of MODELS_DIR -- see
+#     BLOB_MEDIA_PREFIX / _delete_blob_media below. No longer gated; works both
+#     locally (disk) and on Vercel (Blob).
 # DOCLING_ENABLED is its own flag (same on/off shape, deliberately disabled
 # rather than untested) so PDF/DOCX parsing can be toggled independently if a
-# Docling-capable runtime is ever wired up later.
+# Docling-capable runtime is ever wired up later. Note this isn't just a
+# storage problem the way media upload was: Docling pulls in torch/
+# transformers/onnxruntime, which pushes the Python function bundle past
+# Vercel's 500 MB per-function limit outright. Vercel Blob doesn't change
+# that -- enabling this for real would mean running Docling on a separate
+# host (e.g. docling-serve) and calling it over HTTP, not just flipping this
+# flag.
 IS_VERCEL = os.environ.get("VERCEL") == "1"
 
 DOCLING_ENABLED = os.environ.get("VERCEL") != "1"
@@ -1158,14 +1165,23 @@ async def speak_as_character(world_id: str, asset_id: int, body: VoiceSpeakReque
 
 # Storage: unlike the portrait system above (zero storage -- Pollinations
 # URLs are reconstructed deterministically), a 3D model is a real binary file
-# that must be persisted. It lives on disk under MODELS_DIR and is served via
-# the /models static mount registered above; the DB only stores the served
-# path + status/provenance, never the file bytes.
+# that must be persisted. Locally it lives on disk under MODELS_DIR, served
+# via the /models static mount registered above. On Vercel (IS_VERCEL) it's
+# written to Vercel Blob instead -- the deployed filesystem doesn't persist
+# writes across cold starts. Either way, the DB only stores the served path
+# / blob URL + status/provenance, never the file bytes.
 
 MODEL3D_EXTS = {".glb", ".gltf"}
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 VIDEO_EXTS = {".mp4", ".webm", ".mov"}
 CONCEPT_MEDIA_EXTS = MODEL3D_EXTS | IMAGE_EXTS | VIDEO_EXTS
+
+# Pathname prefix inside the connected Vercel Blob store (the "public" store
+# -- concept media is meant to be displayed/downloaded, so a public store
+# serves it straight from Vercel's CDN with no function round-trip). Requires
+# BLOB_READ_WRITE_TOKEN in the environment, which Vercel injects automatically
+# once the store is connected to this project.
+BLOB_MEDIA_PREFIX = "models"
 
 
 def _concept_media_kind(ext: str) -> str | None:
@@ -1180,6 +1196,19 @@ def _concept_media_kind(ext: str) -> str | None:
     return None
 
 
+def _delete_blob_media(model_path: str | None) -> None:
+    """Delete a previously stored concept-media blob, if model_path points at
+    one (a full https:// blob URL) rather than a local /models/ path. Mirrors
+    the MODELS_DIR.glob(...).unlink() cleanup used for local dev. Best-effort
+    -- a failed cleanup shouldn't block the request that's replacing/removing
+    the asset's media."""
+    if model_path and model_path.startswith("http"):
+        try:
+            vercel_blob.delete([model_path])
+        except Exception:
+            pass
+
+
 @app.post("/api/worlds/{world_id}/assets/{asset_id}/model3d/upload")
 async def upload_model3d(world_id: str, asset_id: int, file: UploadFile = File(...)):
     """Manual import path: upload a pre-made 3D model (.glb/.gltf), a
@@ -1187,13 +1216,15 @@ async def upload_model3d(world_id: str, asset_id: int, file: UploadFile = File(.
     for any asset type (not just characters) -- images and video are the
     only option for lore/location/event/other entries, which have no 3D
     generation path, and both remain available for characters too alongside
-    Blender/CharMorph generation."""
-    if IS_VERCEL:
-        raise HTTPException(
-            501,
-            "Manual media upload isn't available in this hosted deployment "
-            "(no persistent file storage configured on Vercel).",
-        )
+    Blender/CharMorph generation.
+
+    Note: Vercel Functions cap request bodies at 4.5 MB, which still applies
+    here even with Blob in the loop -- this endpoint receives the file
+    server-side, it just persists it to Blob instead of local disk once
+    received. Fine for images and most .glb files; a large video upload that
+    exceeds 4.5 MB will be rejected by the platform before this code runs. If
+    that turns out to matter, the fix is a client-side direct-to-Blob upload
+    (bypasses the function body entirely), not a change here."""
     _require_world(world_id)
     asset = db.get_asset(asset_id)
     if not asset or asset.get("worldId") != world_id:
@@ -1209,17 +1240,27 @@ async def upload_model3d(world_id: str, asset_id: int, file: UploadFile = File(.
     if not data:
         raise HTTPException(400, "Uploaded file is empty")
 
-    # Clear out any previously stored file for this asset, regardless of its
+    # Clear out any previously stored media for this asset, regardless of its
     # extension (e.g. swapping an uploaded .glb for a .mp4) -- otherwise the
-    # old file lingers orphaned on disk once the DB row points at the new one.
+    # old file lingers orphaned once the DB row points at the new one.
+    _delete_blob_media(asset.get("model_path"))
     for existing in MODELS_DIR.glob(f"{asset_id}.*"):
         existing.unlink()
 
-    dest = MODELS_DIR / f"{asset_id}{ext}"
-    dest.write_bytes(data)
+    if IS_VERCEL:
+        blob = vercel_blob.put(
+            f"{BLOB_MEDIA_PREFIX}/{asset_id}{ext}",
+            data,
+            {"addRandomSuffix": "false"},
+        )
+        model_path = blob["url"]
+    else:
+        dest = MODELS_DIR / f"{asset_id}{ext}"
+        dest.write_bytes(data)
+        model_path = f"/models/{asset_id}{ext}"
 
     saved = db.update_asset(asset_id, {
-        "model_path": f"/models/{asset_id}{ext}",
+        "model_path": model_path,
         "model_source": "manual",
         "model_status": "ready",
         "model_error": None,
@@ -1265,17 +1306,19 @@ def model3d_status(world_id: str, asset_id: int):
 @app.delete("/api/worlds/{world_id}/assets/{asset_id}/model3d")
 def delete_model3d(world_id: str, asset_id: int):
     """Remove an asset's concept media (3D model, image, or video) --
-    deletes the file on disk (if present) and clears the model_* fields on
-    the asset row. Exists so "delete" is something the app tracks, instead
-    of deleting the file by hand on disk (which the DB never finds out
-    about, so the Gallery keeps showing it as if it still exists). Globs by
-    asset id rather than assuming a .glb extension, since the stored file
-    can now be any of the accepted concept-media formats."""
+    deletes the stored file (Vercel Blob or local disk, whichever this row
+    points at) and clears the model_* fields on the asset row. Exists so
+    "delete" is something the app tracks, instead of deleting the file by
+    hand (which the DB never finds out about, so the Gallery keeps showing
+    it as if it still exists). Globs by asset id rather than assuming a
+    .glb extension, since the stored file can now be any of the accepted
+    concept-media formats."""
     _require_world(world_id)
     asset = db.get_asset(asset_id)
     if not asset or asset.get("worldId") != world_id:
         raise HTTPException(404, "Asset not found in this world")
 
+    _delete_blob_media(asset.get("model_path"))
     for existing in MODELS_DIR.glob(f"{asset_id}.*"):
         existing.unlink()
 
@@ -1886,10 +1929,13 @@ def capabilities():
     """Which optional features this deployment supports. Gallery.jsx and
     Import.jsx fetch this once on load to grey out the buttons/affordances
     for features that are switched off here (rather than each screen
-    guessing from the hostname) -- always all-true locally, all-false on
-    Vercel today."""
+    guessing from the hostname). Media upload now writes to Vercel Blob on
+    Vercel (see BLOB_MEDIA_PREFIX), so it's no longer IS_VERCEL-gated. 3D
+    generation (Blender/CharMorph) still needs a runtime Vercel doesn't have.
+    Docling import stays off on Vercel -- its dependency stack blows past the
+    per-function bundle size limit regardless of storage."""
     return {
         "model3dGeneration": not IS_VERCEL,
-        "mediaUpload": not IS_VERCEL,
+        "mediaUpload": True,
         "doclingImport": DOCLING_ENABLED,
     }
