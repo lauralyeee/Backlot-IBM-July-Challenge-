@@ -105,3 +105,25 @@ The backend tries `ibm/granite-4-h-small` first, then falls back to `mistralai/m
 
 ## Demo
 [3-minute Demo](https://youtu.be/16FDa55rkA4)
+
+
+## License
+ 
+Backlot is licensed under the MIT License. Copyright (c) 2026 Laura Lai and Henry Khoo. See [LICENSE](LICENSE) for the full text.
+ 
+Note: if the IBM Bob AI Builders Challenge official rules impose their own IP terms on submissions, those govern the challenge entry independently of this repository's license.
+ 
+## Third-Party Services & Attribution
+ 
+Backlot calls out to several external models, APIs, and libraries. Each is used under its own license or terms of service, separate from this repository's MIT license:
+ 
+- **IBM Granite** (`ibm/granite-4-h-small`) and **Mistral** (`mistralai/mistral-medium-2505`) — accessed via **watsonx.ai**, used under IBM's and Mistral's respective API terms.
+- **IBM Docling** — open source document conversion library, used under its own license (Apache 2.0).
+- **Google Gemini TTS** — accessed via API under Google's terms of service.
+- **Web Speech API** — browser-native, used under the host browser's terms.
+- **Pollinations.ai** — accessed via API under Pollinations' terms of service.
+- **Blender** — used under the GNU General Public License (GPL).
+- **CharMorph** — Blender add-on, used under its own license (verify GPL/AGPL terms before redistributing any bundled assets).
+- **`<model-viewer>`** — Google, used under the Apache 2.0 License.
+No license text for these third-party components is reproduced here; refer to each project's own repository or provider for their current terms.
+ 
