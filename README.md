@@ -98,7 +98,7 @@ The backend tries `ibm/granite-4-h-small` first, then falls back to `mistralai/m
 | Import | Upload or paste a script/pitch doc and review what Backlot extracted from it before it's added to canon |
 | Export | Compile the world into a character bible, pitch packet, beat sheet, or script, and download it as PDF, DOCX, or Fountain |
 | Settings | Connection test, roles, persona, theme, world name, reset |
-| Assistant | An-AI assistance chatbot that is powered by IBM Granite |
+| Assistant | A chatbot that is powered by IBM Granite. It will detect the current page user is browsing and provide suggestions |
 
 ## Screenshots of the application
 Home/ Landing page
@@ -121,6 +121,9 @@ Export
 
 Settings
 <img width="1499" height="767" alt="image" src="https://github.com/user-attachments/assets/25243dc4-7501-4ff4-ab1b-3d9c68eefd6b" />
+
+Assistant
+<img width="1498" height="770" alt="image" src="https://github.com/user-attachments/assets/3c3f3efd-b2e3-493a-a777-b384dbb1e043" />
 
 
 ## Link
