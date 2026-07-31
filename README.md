@@ -98,6 +98,29 @@ The backend tries `ibm/granite-4-h-small` first, then falls back to `mistralai/m
 | Import | Upload or paste a script/pitch doc and review what Backlot extracted from it before it's added to canon |
 | Export | Compile the world into a character bible, pitch packet, beat sheet, or script, and download it as PDF, DOCX, or Fountain |
 | Settings | Connection test, roles, persona, theme, world name, reset |
+| Assistant | An-AI assistance chatbot that is powered by IBM Granite |
+
+## Screenshots of the application
+Home/ Landing page
+<img width="1499" height="767" alt="image" src="https://github.com/user-attachments/assets/9fa9cb18-c317-4606-9e00-5e7ced4312a1" />
+
+World Book
+<img width="1499" height="767" alt="image" src="https://github.com/user-attachments/assets/a1f186e6-5c20-4631-92ea-c326aa683b20" />
+
+Gallery
+<img width="1499" height="767" alt="image" src="https://github.com/user-attachments/assets/40855e77-4e22-4f2f-b5f4-762640d61b99" />
+
+Characters
+<img width="1499" height="767" alt="image" src="https://github.com/user-attachments/assets/ad7f343b-4d2f-42c8-a8ff-d72829422766" />
+
+Import
+<img width="1499" height="767" alt="image" src="https://github.com/user-attachments/assets/774dd69d-bf65-48c2-850c-60e8e4ea99f1" />
+
+Export
+<img width="1499" height="767" alt="image" src="https://github.com/user-attachments/assets/25469505-be77-4612-b5d5-43c4fafa80fe" />
+
+Settings
+<img width="1499" height="767" alt="image" src="https://github.com/user-attachments/assets/25243dc4-7501-4ff4-ab1b-3d9c68eefd6b" />
 
 
 ## Link
