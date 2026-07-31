@@ -111,7 +111,6 @@ The backend tries `ibm/granite-4-h-small` first, then falls back to `mistralai/m
  
 Backlot is licensed under the MIT License. Copyright (c) 2026 Laura Lai and Henry Khoo. See [LICENSE](LICENSE) for the full text.
  
-Note: if the IBM Bob AI Builders Challenge official rules impose their own IP terms on submissions, those govern the challenge entry independently of this repository's license.
  
 ## Third-Party Services & Attribution
  
