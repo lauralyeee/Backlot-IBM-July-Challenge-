@@ -104,4 +104,4 @@ The backend tries `ibm/granite-4-h-small` first, then falls back to `mistralai/m
 [Live Hosted Website](https://ibmbacklot.vercel.app/) 
 
 ## Demo
-[3-minute Demo]([https://ibmbacklot.vercel.app/](https://youtu.be/16FDa55rkA4) 
+[3-minute Demo](https://youtu.be/16FDa55rkA4)
