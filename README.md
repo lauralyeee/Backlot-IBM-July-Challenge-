@@ -98,3 +98,10 @@ The backend tries `ibm/granite-4-h-small` first, then falls back to `mistralai/m
 | Import | Upload or paste a script/pitch doc and review what Backlot extracted from it before it's added to canon |
 | Export | Compile the world into a character bible, pitch packet, beat sheet, or script, and download it as PDF, DOCX, or Fountain |
 | Settings | Connection test, roles, persona, theme, world name, reset |
+
+
+## Link
+[Live Hosted Website](https://ibmbacklot.vercel.app/) 
+
+## Demo
+[3-minute Demo]([https://ibmbacklot.vercel.app/](https://youtu.be/16FDa55rkA4) 
