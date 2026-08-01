@@ -19,3 +19,10 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+Scope note: this license covers the Backlot source code (frontend, backend,
+and build scripts) authored by the copyright holders above. It does not
+extend to third-party software bundled or invoked by the project, or to
+media generated through external AI services. See NOTICE.md for details.
