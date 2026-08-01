@@ -42,6 +42,14 @@ export default function Onboarding({ onDone, mode, toggleTheme }) {
   const [customOffline, setCustomOffline] = useState(false);
   const [customErrorReason, setCustomErrorReason] = useState("");
 
+  // "Create my world" kicks off createWorld -> listAssets -> describeEras on
+  // the parent (App.jsx's onDone), which can take a minute or two end-to-end
+  // (era descriptions are AI-generated). Without this, pressing the button
+  // just silently sat on step 3 with no feedback until the whole chain
+  // resolved and the app swapped to the main screen -- looked frozen/broken.
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState("");
+
   const toggleRole = (id) => setRoles((r) => (r.includes(id) ? r.filter((x) => x !== id) : [...r, id]));
 
   const handlePickPersona = (p) => {
@@ -99,6 +107,44 @@ export default function Onboarding({ onDone, mode, toggleTheme }) {
   };
 
   const customCharsNeeded = Math.max(0, 10 - customDesc.trim().length);
+
+  const handleCreate = async () => {
+    if (creating || !name.trim()) return;
+    setCreating(true);
+    setCreateError("");
+    try {
+      await onDone({
+        name: name.trim(), roles, personaId: persona.id, personaLabel: persona.label,
+        description: persona.desc || "",
+        eras: persona.eras, ideas: persona.ideas, dialects: persona.dialects || {},
+        seed: persona.seed.map((s, i) => ({ ...s, id: i + 1, createdAt: Date.now() - (persona.seed.length - i) * 1000 })),
+      });
+      // On success, App.jsx swaps in the main app and unmounts this screen --
+      // no need to clear `creating` here.
+    } catch (err) {
+      setCreateError(extractErrorDetail(err));
+      setCreating(false);
+    }
+  };
+
+  // Full-screen takeover while the world is being built. The chain this
+  // kicks off (create -> fetch seed assets -> auto-describe eras) can take
+  // a minute or two, so a static disabled button isn't enough signal --
+  // this makes it unambiguous that something is happening.
+  if (creating) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}>
+        <div className="brand-mark" style={{ width: 40, height: 40 }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--text-dim)", fontSize: 15.5 }}>
+          <span className="pulse-dot" />
+          Building your world…
+        </div>
+        <p style={{ color: "var(--text-faint)", fontSize: 13, maxWidth: 340, textAlign: "center", lineHeight: 1.6 }}>
+          Generating eras and starting lore. This can take a minute or two.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: "100vh", position: "relative" }}>
@@ -296,14 +342,20 @@ export default function Onboarding({ onDone, mode, toggleTheme }) {
                 {persona.nameIdeas.map((n) => <Chip key={n} active={name === n} onClick={() => setName(n)}>{n}</Chip>)}
               </div>
               <Field value={name} onChange={(e) => setName(e.target.value)} placeholder="Or type your own name…" style={{ marginBottom: 20 }} />
+              {createError && (
+                <div style={{
+                  fontSize: 13, color: "var(--text-dim)", background: "var(--surface)",
+                  border: "1px solid var(--border)", borderRadius: "var(--radius)",
+                  padding: "10px 14px", marginBottom: 16,
+                }}>
+                  Couldn't create your world. Reason: {createError}
+                </div>
+              )}
               <div style={{ display: "flex", gap: 10 }}>
-                <Btn onClick={() => { setStep(1); setCustomOffline(false); }} title="Back to choosing your world's style">Back</Btn>
-                <Btn variant="primary" disabled={!name.trim()} title="Save this world and start building" onClick={() => onDone({
-                  name: name.trim(), roles, personaId: persona.id, personaLabel: persona.label,
-                  description: persona.desc || "",
-                  eras: persona.eras, ideas: persona.ideas, dialects: persona.dialects || {},
-                  seed: persona.seed.map((s, i) => ({ ...s, id: i + 1, createdAt: Date.now() - (persona.seed.length - i) * 1000 })),
-                })}>Create my world <IconArrowRight width={16} height={16} /></Btn>
+                <Btn onClick={() => { setStep(1); setCustomOffline(false); }} disabled={creating} title="Back to choosing your world's style">Back</Btn>
+                <Btn variant="primary" disabled={!name.trim() || creating} title="Save this world and start building" onClick={handleCreate}>
+                  {creating ? "Creating…" : <>Create my world <IconArrowRight width={16} height={16} /></>}
+                </Btn>
               </div>
               <p style={{ fontSize: 13, color: "var(--text-faint)", marginTop: 16, lineHeight: 1.6 }}>
                 Your world starts with a few example entries so there's something to explore right away.
