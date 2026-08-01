@@ -10,7 +10,7 @@ built for.
 
 Backlot depends on the following open-source packages, each under its own
 license. Their license texts are preserved in `node_modules/` and the Python
-virtual environment as installed; this table is a summary, not a substitute.
+virtual environment as installed. This table is a summary and not a substitute.
 
 ### Frontend (npm)
 
@@ -32,10 +32,10 @@ virtual environment as installed; this table is a summary, not a substitute.
 | python-dotenv | BSD-3-Clause |
 | python-multipart | Apache-2.0 |
 | libsql | MIT |
-| vercel_blob | MIT (per publisher; not independently verified — confirm before public release) |
+| vercel_blob | MIT (per publisher) |
 | reportlab | BSD (ReportLab license) |
 | python-docx | MIT |
-| docling | MIT (local dev only; not included in the Vercel deployment bundle) |
+| docling | MIT (local dev only. It is not included in the Vercel deployment bundle) |
 
 None of these licenses require Backlot itself to be relicensed. Apache-2.0
 and BSD components additionally require their own copyright/attribution
@@ -78,5 +78,5 @@ This project was built by Laura Lai Jia Ying and Henry Khoo Shien Chen for
 the IBM AI Builders Challenge, July 2026 (Creative Industries theme). The
 MIT License above governs how *other developers* may reuse this code; it
 does not override any separate submission terms, IP grants, or usage rights
-the challenge's official rules require from participants. Consult those
-rules directly for anything related to the competition submission itself.
+the challenge's official rules require from participants. Consult the official
+rules directly based on competition submission.
