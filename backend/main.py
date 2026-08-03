@@ -1906,6 +1906,20 @@ async def widget_chat(body: WidgetChatRequest):
 
 # ── Diagnostics ───────────────────────────────────────────────────────────────
 
+@app.get("/api/admin/activity")
+def admin_activity(limit: int = 50):
+    """Recent write activity across every table, most-recent-first, ordered
+    by the server-side written_at timestamp (not the caller-supplied
+    createdAt). A quick way to see whether anyone new is using the app --
+    each new `worlds` row is a new person starting a session -- and when
+    the app was last written to at all."""
+    return {
+        "activity": db.get_recent_activity(limit=limit),
+        "newWorldsLast24h": db.count_new_worlds_since(24 * 60 * 60),
+        "newWorldsLast7d": db.count_new_worlds_since(7 * 24 * 60 * 60),
+    }
+
+
 @app.get("/api/ping")
 async def ping():
     try:

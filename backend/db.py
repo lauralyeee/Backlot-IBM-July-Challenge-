@@ -175,6 +175,40 @@ def init_db():
         # "Clan") when lore/character/location/event doesn't fit.
         if "type_label" not in existing_cols:
             conn.execute("ALTER TABLE assets ADD COLUMN type_label TEXT DEFAULT NULL")
+
+        # written_at: server-side insert timestamp, distinct from created_at.
+        # created_at is supplied by the caller (the frontend sends
+        # Date.now() for worlds/assets), so it reflects when the client
+        # *intended* to create the row, not necessarily when the row was
+        # actually written to Turso -- clock skew, retries, or a future
+        # non-frontend caller could all make them diverge. written_at is
+        # meant to be the trustworthy one, stamped by the database itself.
+        #
+        # Note this can't be done with a plain column DEFAULT: libsql
+        # silently no-ops `ALTER TABLE ... ADD COLUMN x DEFAULT (unixepoch())`
+        # on a table that already has rows (constant defaults like DEFAULT 0
+        # or DEFAULT NULL work fine there -- it's specifically a
+        # non-constant/expression default on non-empty tables that gets
+        # dropped without raising). So: add the column with a constant NULL
+        # default (safe on any table), backfill existing rows once, then use
+        # an AFTER INSERT trigger to stamp every future row -- triggers fire
+        # for *any* INSERT regardless of which function or future code path
+        # performs it, so this can't be forgotten the way an app-level
+        # "set timestamp before insert" convention could.
+        for table in ("worlds", "assets", "documents", "relationships", "export_versions"):
+            cols = {row["name"] for row in _all(conn.execute(f"PRAGMA table_info({table})"))}
+            if "written_at" not in cols:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN written_at INTEGER DEFAULT NULL")
+                conn.execute(f"UPDATE {table} SET written_at = unixepoch() WHERE written_at IS NULL")
+            conn.execute(f"""
+                CREATE TRIGGER IF NOT EXISTS trg_{table}_written_at
+                AFTER INSERT ON {table}
+                WHEN NEW.written_at IS NULL
+                BEGIN
+                    UPDATE {table} SET written_at = unixepoch() WHERE rowid = NEW.rowid;
+                END;
+            """)
+
         # Explicit commit rather than relying on the `with` block's implicit
         # commit-on-exit -- belt-and-suspenders while this connection layer
         # is freshly ported to libsql/Turso.
@@ -649,3 +683,56 @@ def _row_to_export_version(row) -> dict:
         "offline": bool(row["offline"]),
         "createdAt": row["created_at"],
     }
+
+
+# ── Activity feed (server-side write tracking) ──────────────────────────────
+# Reads written_at (set automatically at INSERT time, see init_db) across
+# every table so you can see real write activity -- e.g. a burst of new
+# `worlds` rows is a new person starting to use the app, since a world is
+# the first thing created in any session.
+
+_ACTIVITY_TABLES = [
+    ("worlds", "name"),
+    ("assets", "title"),
+    ("documents", "title"),
+    ("relationships", "asset_a_title"),
+    ("export_versions", "doc_type"),
+]
+
+
+def get_recent_activity(limit: int = 50) -> list[dict]:
+    """Most-recent-first feed of every row written across all tables,
+    labeled by table and a human-readable label column. `writtenAt` is the
+    trustworthy server timestamp (epoch seconds); `createdAt` is whatever
+    the caller supplied and is included for comparison."""
+    with _connect() as conn:
+        parts = [
+            f"SELECT '{table}' AS table_name, id, {label_col} AS label, "
+            f"written_at, created_at FROM {table} WHERE written_at IS NOT NULL"
+            for table, label_col in _ACTIVITY_TABLES
+        ]
+        query = " UNION ALL ".join(parts) + " ORDER BY written_at DESC LIMIT ?"
+        rows = _all(conn.execute(query, (limit,)))
+    return [
+        {
+            "table": row["table_name"],
+            "id": row["id"],
+            "label": row["label"],
+            "writtenAt": row["written_at"],
+            "createdAt": row["created_at"],
+        }
+        for row in rows
+    ]
+
+
+def count_new_worlds_since(seconds_ago: int) -> int:
+    """Count of worlds (~ new users, since a world is created the moment
+    someone starts using the app) first written in the last N seconds,
+    using the trustworthy written_at rather than the caller-supplied
+    created_at."""
+    with _connect() as conn:
+        row = _one(conn.execute(
+            "SELECT COUNT(*) AS c FROM worlds WHERE written_at >= unixepoch() - ?",
+            (seconds_ago,),
+        ))
+    return row["c"] if row else 0
